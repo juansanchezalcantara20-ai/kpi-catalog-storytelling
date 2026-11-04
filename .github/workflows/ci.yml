@@ -22,3 +22,5 @@ jobs:
         run: python -m kpistory validate
       - name: Formula tests (hand-calculated examples)
         run: python -m pytest
+      - name: Build everything offline (plan B data, pages, site)
+        run: make all SOURCE=synthetic

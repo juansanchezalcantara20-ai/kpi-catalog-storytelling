@@ -45,7 +45,7 @@ nav:
       - 3 · Inventory & demand: cases/inventory.md
       - 4 · Customers: cases/customers.md
       - 5 · Data quality as a KPI: cases/data_quality.md
-  # - Anti-pattern gallery: antipatterns.md
+  - Anti-pattern gallery: antipatterns.md
   - KPI catalog: catalog/index.md
   # - Power BI layer: powerbi.md
   - About:

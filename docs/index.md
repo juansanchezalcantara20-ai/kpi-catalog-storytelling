@@ -8,6 +8,7 @@ this website and a Power BI semantic layer generated from the same catalog.
 
 - **[Five business cases](cases/service.md)** - service SLA, maintenance, inventory,
   customers and data quality, each told as *context → question → KPI → finding → decision → how we keep measuring*.
+- **[Anti-pattern gallery](antipatterns.md)** - the same data shown wrong and right, side by side.
 - **[KPI catalog](catalog/index.md)** - definition, formula, target, owner, how to read it,
   common misreadings, DAX, SQL and a hand-calculated worked example for every KPI.
 

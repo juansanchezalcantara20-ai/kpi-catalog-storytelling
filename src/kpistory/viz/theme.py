@@ -96,11 +96,11 @@ def wrap(text: str, width: int = 74) -> str:
     return "<br>".join(lines)
 
 
-def title(conclusion: str, subtitle: str) -> dict:
+def title(conclusion: str, subtitle: str, width: int = 74) -> dict:
     """Plotly title: the conclusion in bold ink, what is plotted underneath in grey."""
-    sub = wrap(subtitle, 100).replace(
+    sub = wrap(subtitle, int(width * 1.3)).replace(
         "<br>", f"</span><br><span style='font-size:13px;color:{INK_2}'>"
     )
     return dict(
-        text=f"<b>{wrap(conclusion)}</b><br><span style='font-size:13px;color:{INK_2}'>{sub}</span>"
+        text=f"<b>{wrap(conclusion, width)}</b><br><span style='font-size:13px;color:{INK_2}'>{sub}</span>"
     )

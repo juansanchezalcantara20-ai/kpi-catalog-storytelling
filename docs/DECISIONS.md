@@ -69,3 +69,13 @@ decisions are appended at the end of each phase.
 | 45 | The NPS composition is the site's **only part-to-whole chart: a 100% bar with exactly three parts**. NPS by segment is shown with 95% margins of error. | Within the "no pies with more than three parts" rule, and NPS without n and error bars invites over-reading. |
 | 46 | The NPS-segment relationship is **declared an assumption** on the page. | Scores were generated per segment, so presenting the link as a finding would be circular. |
 | 47 | The data-quality grid colours cells by **status against the catalog target**, never by raw value, and shows "not measurable" instead of a value where no load timestamp exists. | A 99.2% can be a problem (uniqueness) while 96% is fine elsewhere; and an invented 100% would hide a missing audit column. |
+
+## Phase 5 · Anti-pattern gallery
+
+| # | Decision | Why |
+|---|----------|-----|
+| 48 | Six pairs, each built from the **cases' own data**: truncated axis, mean vs median, too many series, pie vs bars, traffic light without target, dual axis. | The five requested plus the dual axis, the most common way to invent a correlation. Using the cases' data shows the honest version is the one actually used. |
+| 49 | Misleading charts use **library-default habits** (descriptive titles, rainbow colours, legends) rather than exaggerated strawmen. | The gallery is credible only if the left side looks like something people really publish. |
+| 50 | The traffic-light pair colours the misleading side **relative to the fleet average**. | It is the subtle and common version of "status without a target": half the fleet is red by construction. |
+| 51 | The "too many series" message is chosen by the data (the top-10 SKU whose demand dropped most) with a conditional title. | A first draft claimed a SKU was "seasonal" with 29% of its year in Q4 - barely above the 25% of a flat year. The claim was replaced by one the data supports. |
+| 52 | CI also runs `make all SOURCE=synthetic` on every push. | The site generator is code too; a broken page should fail the build, not the deploy. |
