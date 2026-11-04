@@ -1,0 +1,919 @@
+# KPI catalog: the single source of truth.
+#
+# Every KPI is defined here once. The Python engine (src/kpistory), the static site,
+# the SQL reference queries and the Power BI measures are all derived from this file.
+# Schema: kpis/catalog.schema.json  -  Validate with: kpistory validate
+#
+# Conventions
+#   * Ratios are stored as fractions (0.92) and displayed as percentages (92.0%).
+#   * thresholds.green / thresholds.amber are the boundaries of the traffic light:
+#       higher_is_better -> green if value >= green, amber if value >= amber, else red
+#       lower_is_better  -> green if value <= green, amber if value <= amber, else red
+#       target_range     -> green if inside [green], amber if inside [amber], else red
+#   * dax/sql may reference params as ${name}; they are substituted from `params`
+#     so a parameter (e.g. the 7-day backlog limit) is written only once.
+#   * Targets are illustrative: they are set for the synthetic / public data of this
+#     portfolio, not taken from any real organisation.
+
+version: 1
+cases:
+  service:
+    title: Service operations & SLA
+    tables: [tickets]
+  maintenance:
+    title: Maintenance & asset reliability
+    tables: [work_orders, asset_periods]
+  inventory:
+    title: Inventory & demand
+    tables: [order_lines, inventory_daily, inventory_snapshot, forecast]
+  customers:
+    title: Customers
+    tables: [sales, customer_rfm, survey]
+  data_quality:
+    title: Data quality as a KPI
+    tables: [dq_results]
+
+kpis:
+  # ------------------------------------------------------------------ SERVICE
+  - id: first_response_time
+    name: First response time (median)
+    case: service
+    question: How long does a customer wait before a human acknowledges the ticket?
+    definition: >-
+      Median elapsed hours between ticket creation and the first agent response,
+      over tickets that have received a response.
+    formula: "median(first_response_at - created_at) [hours]"
+    unit: hours
+    granularity: Ticket; reported weekly by priority and queue.
+    direction: lower_is_better
+    target: 2.0
+    thresholds: {green: 2.0, amber: 4.0}
+    owner: Service Desk Lead
+    source: Ticketing system (synthetic generator)
+    input: {table: tickets, columns: [first_response_hours]}
+    how_to_read: >-
+      Half of the tickets got a first answer faster than this value. Read it per
+      priority: a good fleet median can hide P1 tickets waiting overnight.
+    misreadings:
+      - Using the mean - a handful of tickets answered after a weekend dominates it.
+      - Counting auto-replies as a first response makes the KPI look perfect and meaningless.
+      - Ignoring unanswered tickets - they are censored, not fast; track them as backlog.
+    related: [resolution_time, sla_compliance]
+    chart: {type: line, why: "Trend over weeks against the target line; the question is 'are we drifting?'."}
+    dax: |-
+      MEDIAN ( Tickets[first_response_hours] )
+    sql: |-
+      WITH x AS (
+        SELECT first_response_hours AS v,
+               ROW_NUMBER() OVER (ORDER BY first_response_hours) AS rn,
+               COUNT(*) OVER () AS n
+        FROM tickets WHERE first_response_hours IS NOT NULL)
+      SELECT AVG(v) FROM x WHERE rn IN ((n + 1) / 2, (n + 2) / 2)
+
+  - id: resolution_time
+    name: Resolution time (median)
+    case: service
+    question: How long does it take to solve a customer's problem end to end?
+    definition: Median elapsed hours from creation to resolution over resolved tickets.
+    formula: "median(resolved_at - created_at) for status = resolved [hours]"
+    unit: hours
+    granularity: Ticket; reported weekly by priority and queue.
+    direction: lower_is_better
+    target: 24.0
+    thresholds: {green: 24.0, amber: 36.0}
+    owner: Service Desk Manager
+    source: Ticketing system (synthetic generator)
+    input: {table: tickets, columns: [status, resolution_hours]}
+    how_to_read: >-
+      The typical end-to-end wait. Always pair it with the 90th percentile: the
+      customers who complain live in the tail, not at the median.
+    misreadings:
+      - The mean is pulled up by a few very old tickets; the median alone hides them - show both or the P90.
+      - Only resolved tickets are counted, so a growing backlog of hard tickets makes this KPI improve (survivorship).
+      - Calendar hours vs business hours must be stated; mixing them across teams breaks comparisons.
+    related: [first_response_time, sla_compliance, backlog_aged_share, reopen_rate]
+    chart: {type: histogram, why: "The distribution (with median and P90 marked) shows the long tail that a single number hides."}
+    dax: |-
+      CALCULATE ( MEDIAN ( Tickets[resolution_hours] ), Tickets[status] = "resolved" )
+    sql: |-
+      WITH x AS (
+        SELECT resolution_hours AS v,
+               ROW_NUMBER() OVER (ORDER BY resolution_hours) AS rn,
+               COUNT(*) OVER () AS n
+        FROM tickets WHERE status = 'resolved')
+      SELECT AVG(v) FROM x WHERE rn IN ((n + 1) / 2, (n + 2) / 2)
+
+  - id: sla_compliance
+    name: SLA compliance
+    case: service
+    question: What share of tickets did we resolve within the time we promised?
+    definition: >-
+      Resolved tickets whose resolution time is within the SLA target of their
+      priority, divided by all resolved tickets.
+    formula: "count(resolution_hours <= sla_target_hours) / count(resolved)"
+    unit: percent
+    granularity: Ticket; reported weekly and monthly by priority and queue.
+    direction: higher_is_better
+    target: 0.90
+    thresholds: {green: 0.90, amber: 0.85}
+    owner: Service Desk Manager
+    source: Ticketing system (synthetic generator)
+    input: {table: tickets, columns: [status, resolution_hours, sla_target_hours]}
+    how_to_read: >-
+      The promise kept. A drop means customers felt it already; look at aged
+      backlog to see the drop coming two to three weeks earlier.
+    misreadings:
+      - A lagging indicator - it is measured at closure, so tickets breaching right now are not in it yet.
+      - Pausing the SLA clock ("waiting for customer") without auditing the pauses inflates compliance.
+      - An overall figure averages P1 and P4; a 95% fleet number can coexist with a broken P1 promise.
+    related: [resolution_time, backlog_aged_share]
+    chart: {type: bullet, why: "Value against target and amber band in one glance; per queue as small bullets."}
+    dax: |-
+      DIVIDE (
+          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved", Tickets[within_sla] = TRUE () ),
+          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved" )
+      )
+    sql: |-
+      SELECT CAST(SUM(CASE WHEN resolution_hours <= sla_target_hours THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+      FROM tickets WHERE status = 'resolved'
+
+  - id: backlog_aged_share
+    name: Aged backlog (> 7 days)
+    case: service
+    question: How much of the open work is already old enough to hurt the SLA?
+    definition: Share of open tickets whose age at the snapshot date exceeds the age limit.
+    formula: "count(open AND age_days > age_limit_days) / count(open)"
+    unit: percent
+    granularity: Snapshot of open tickets; taken daily or weekly per queue.
+    direction: lower_is_better
+    target: 0.10
+    thresholds: {green: 0.10, amber: 0.20}
+    params: {age_limit_days: 7}
+    owner: Queue Team Lead
+    source: Ticketing system (synthetic generator)
+    input: {table: tickets, columns: [status, age_days]}
+    how_to_read: >-
+      A leading indicator: tickets that are old today become SLA breaches when
+      they close. Rising aged share with a flat backlog size means work is being
+      cherry-picked (easy tickets first).
+    misreadings:
+      - Backlog size alone can stay flat while its age explodes; always look at age.
+      - A snapshot on Monday morning and one on Friday evening are not comparable; fix the snapshot moment.
+    related: [sla_compliance, resolution_time]
+    chart: {type: bar, why: "Stacked age buckets per queue show where the old work sits."}
+    dax: |-
+      DIVIDE (
+          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "open", Tickets[age_days] > ${age_limit_days} ),
+          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "open" )
+      )
+    sql: |-
+      SELECT CAST(SUM(CASE WHEN age_days > ${age_limit_days} THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+      FROM tickets WHERE status = 'open'
+
+  - id: first_contact_resolution
+    name: First contact resolution (FCR)
+    case: service
+    question: How often do we solve the problem in a single interaction?
+    definition: >-
+      Resolved tickets that needed exactly one customer contact and were not
+      reopened, divided by all resolved tickets.
+    formula: "count(contacts = 1 AND NOT reopened) / count(resolved)"
+    unit: percent
+    granularity: Ticket; reported monthly by channel and queue.
+    direction: higher_is_better
+    target: 0.70
+    thresholds: {green: 0.70, amber: 0.60}
+    owner: Service Desk Manager
+    source: Ticketing system (synthetic generator)
+    input: {table: tickets, columns: [status, contacts, reopened]}
+    how_to_read: >-
+      Effort saved for the customer and the team. Compare by channel: chat and
+      phone usually differ structurally, so set targets per channel.
+    misreadings:
+      - Counting a ticket as FCR and then letting it reopen double-counts success; reopened tickets are excluded here.
+      - Pushing FCR by closing tickets prematurely shows up as a higher reopen rate - read them together.
+    related: [reopen_rate, resolution_time]
+    chart: {type: bar, why: "Comparison across channels, sorted, against the target line."}
+    dax: |-
+      DIVIDE (
+          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved", Tickets[contacts] = 1, Tickets[reopened] = FALSE () ),
+          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved" )
+      )
+    sql: |-
+      SELECT CAST(SUM(CASE WHEN contacts = 1 AND reopened = 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+      FROM tickets WHERE status = 'resolved'
+
+  - id: reopen_rate
+    name: Reopen rate
+    case: service
+    question: How often is a "resolved" ticket not really resolved?
+    definition: Resolved tickets that were reopened at least once, divided by resolved tickets.
+    formula: "count(reopened) / count(resolved)"
+    unit: percent
+    granularity: Ticket; reported monthly by queue and agent group.
+    direction: lower_is_better
+    target: 0.05
+    thresholds: {green: 0.05, amber: 0.08}
+    owner: Quality Lead (Service)
+    source: Ticketing system (synthetic generator)
+    input: {table: tickets, columns: [status, reopened]}
+    how_to_read: >-
+      The quality counterweight to every speed KPI. If resolution time improves
+      and reopen rate rises, speed was bought with quality.
+    misreadings:
+      - Reading it without a time window - reopenings arrive days later, so the last weeks always look better than they are.
+    related: [first_contact_resolution, resolution_time]
+    chart: {type: line, why: "Trend next to resolution time to expose a speed-vs-quality trade-off."}
+    dax: |-
+      DIVIDE (
+          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved", Tickets[reopened] = TRUE () ),
+          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved" )
+      )
+    sql: |-
+      SELECT CAST(SUM(CASE WHEN reopened = 1 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+      FROM tickets WHERE status = 'resolved'
+
+  # -------------------------------------------------------------- MAINTENANCE
+  - id: mtbf
+    name: Mean time between failures (MTBF)
+    case: maintenance
+    question: How long does an asset run, on average, before it fails?
+    definition: Total operating hours divided by the number of failures in the same scope and period.
+    formula: "sum(operating_hours) / sum(failures)"
+    unit: hours
+    granularity: Asset x month; rolled up by asset class.
+    direction: higher_is_better
+    target: 150.0
+    thresholds: {green: 150.0, amber: 100.0}
+    owner: Reliability Engineer
+    source: Process data (UCI AI4I 2020) mapped to an asset fleet + work-order generator
+    input: {table: asset_periods, columns: [operating_hours, failures]}
+    how_to_read: >-
+      Higher means more reliable. Compute it as a ratio of sums over the period,
+      never as the average of monthly MTBFs (months with zero failures break that).
+    misreadings:
+      - Averaging per-asset MTBF values instead of sum(hours)/sum(failures) overweights rarely-used assets.
+      - Using calendar hours instead of operating hours rewards idle assets.
+      - With very few failures the value is volatile; report the failure count next to it.
+    related: [mttr, availability, planned_work_share]
+    chart: {type: bar, why: "Ranking assets: the lowest bars are the reliability backlog."}
+    dax: |-
+      DIVIDE ( SUM ( AssetPeriods[operating_hours] ), SUM ( AssetPeriods[failures] ) )
+    sql: |-
+      SELECT CAST(SUM(operating_hours) AS REAL) / SUM(failures) FROM asset_periods
+
+  - id: mttr
+    name: Mean time to repair (MTTR)
+    case: maintenance
+    question: Once an asset fails, how long until it runs again?
+    definition: Mean repair hours (failure to return to service) over corrective work orders.
+    formula: "mean(repair_hours) for wo_type = corrective"
+    unit: hours
+    granularity: Corrective work order; reported monthly by asset and failure mode.
+    direction: lower_is_better
+    target: 4.0
+    thresholds: {green: 4.0, amber: 6.0}
+    owner: Maintenance Supervisor
+    source: Work-order generator (synthetic)
+    input: {table: work_orders, columns: [wo_type, repair_hours]}
+    how_to_read: >-
+      Kept as a mean so that availability = MTBF / (MTBF + MTTR) holds. Because
+      repair times are right-skewed, always look at the median and the longest
+      repairs: waiting for spare parts usually lives in the tail.
+    misreadings:
+      - Mean vs median - a few repairs waiting for parts can double the mean while the typical repair is unchanged.
+      - Repair time is not response time; mixing "time to arrive" and "time to fix" hides where the delay is.
+    related: [mtbf, availability]
+    chart: {type: boxplot, why: "Distribution per failure mode shows whether the mean is driven by a tail."}
+    dax: |-
+      CALCULATE ( AVERAGE ( WorkOrders[repair_hours] ), WorkOrders[wo_type] = "corrective" )
+    sql: |-
+      SELECT AVG(repair_hours) FROM work_orders WHERE wo_type = 'corrective'
+
+  - id: availability
+    name: Availability
+    case: maintenance
+    question: Of the time the asset was supposed to run, how much could it actually run?
+    definition: >-
+      Scheduled hours minus unplanned downtime, divided by scheduled hours.
+      Planned stops (preventive maintenance) are excluded from the scheduled time.
+    formula: "(sum(scheduled_hours) - sum(unplanned_downtime_hours)) / sum(scheduled_hours)"
+    unit: percent
+    granularity: Asset x month.
+    direction: higher_is_better
+    target: 0.97
+    thresholds: {green: 0.97, amber: 0.95}
+    owner: Maintenance Manager
+    source: Process data (UCI AI4I 2020) + work-order generator
+    input: {table: asset_periods, columns: [scheduled_hours, unplanned_downtime_hours]}
+    how_to_read: >-
+      The outcome KPI that operations feels. Decompose it: low availability with
+      high MTBF is a repair-speed problem (MTTR); with low MTBF it is a reliability problem.
+    misreadings:
+      - Different definitions of scheduled time (24/7 vs shifts) make plants incomparable; state the denominator.
+      - Excluding "minor stops" under a few minutes can hide a large share of lost time.
+    related: [mtbf, mttr]
+    chart: {type: line, why: "Monthly trend against target; one line per asset class at most."}
+    dax: |-
+      DIVIDE (
+          SUM ( AssetPeriods[scheduled_hours] ) - SUM ( AssetPeriods[unplanned_downtime_hours] ),
+          SUM ( AssetPeriods[scheduled_hours] )
+      )
+    sql: |-
+      SELECT CAST(SUM(scheduled_hours) - SUM(unplanned_downtime_hours) AS REAL) / SUM(scheduled_hours)
+      FROM asset_periods
+
+  - id: pm_compliance
+    name: Preventive maintenance compliance
+    case: maintenance
+    question: Are we doing the preventive work we planned, when we planned it?
+    definition: >-
+      Preventive work orders completed no later than due date + tolerance,
+      divided by preventive work orders due in the period.
+    formula: "count(preventive AND completed_at <= due_date + tolerance_days) / count(preventive due)"
+    unit: percent
+    granularity: Preventive work order; reported monthly by asset and crew.
+    direction: higher_is_better
+    target: 0.90
+    thresholds: {green: 0.90, amber: 0.80}
+    params: {tolerance_days: 3}
+    owner: Maintenance Planner
+    source: Work-order generator (synthetic)
+    input: {table: work_orders, columns: [wo_type, due_date, completed_at]}
+    how_to_read: >-
+      A leading indicator of reliability. Late or skipped PMs show up as failures
+      weeks later, so a drop here predicts a drop in MTBF.
+    misreadings:
+      - Counting a PM done three weeks late as "done" hides the risk window; the tolerance makes lateness explicit.
+      - Rescheduling the due date to the completion date makes compliance 100% by construction - audit date changes.
+    related: [planned_work_share, mtbf]
+    chart: {type: bar, why: "Per-asset comparison sorted ascending; the worst assets are the action list."}
+    dax: |-
+      DIVIDE (
+          CALCULATE ( COUNTROWS ( WorkOrders ), WorkOrders[wo_type] = "preventive", WorkOrders[pm_on_time] = TRUE () ),
+          CALCULATE ( COUNTROWS ( WorkOrders ), WorkOrders[wo_type] = "preventive" )
+      )
+    sql: |-
+      SELECT CAST(SUM(CASE WHEN completed_at IS NOT NULL
+                            AND julianday(completed_at) <= julianday(due_date) + ${tolerance_days} THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+      FROM work_orders WHERE wo_type = 'preventive'
+
+  - id: planned_work_share
+    name: Planned maintenance share
+    case: maintenance
+    question: How much of our maintenance effort is planned rather than reactive?
+    definition: Labour hours on planned work orders divided by all maintenance labour hours.
+    formula: "sum(labor_hours where planned) / sum(labor_hours)"
+    unit: percent
+    granularity: Work order; reported monthly by crew.
+    direction: higher_is_better
+    target: 0.80
+    thresholds: {green: 0.80, amber: 0.65}
+    owner: Maintenance Manager
+    source: Work-order generator (synthetic)
+    input: {table: work_orders, columns: [planned, labor_hours]}
+    how_to_read: >-
+      A maturity indicator: reactive work costs more and disrupts production.
+      It moves slowly; read it quarterly.
+    misreadings:
+      - Counting work orders instead of hours - many small planned inspections can hide a few huge breakdowns.
+      - Raising it by re-labelling emergency work as "planned" the same day; planned means scheduled ahead.
+    related: [pm_compliance, mtbf]
+    chart: {type: bar, why: "Stacked 100% bar per month (two parts only) or a line against target."}
+    dax: |-
+      DIVIDE (
+          CALCULATE ( SUM ( WorkOrders[labor_hours] ), WorkOrders[planned] = TRUE () ),
+          SUM ( WorkOrders[labor_hours] )
+      )
+    sql: |-
+      SELECT CAST(SUM(CASE WHEN planned = 1 THEN labor_hours ELSE 0 END) AS REAL) / SUM(labor_hours)
+      FROM work_orders
+
+  # ---------------------------------------------------------------- INVENTORY
+  - id: fill_rate
+    name: Fill rate (units)
+    case: inventory
+    question: Of the units customers asked for, how many did we ship from stock?
+    definition: Units shipped divided by units ordered.
+    formula: "sum(qty_shipped) / sum(qty_ordered)"
+    unit: percent
+    granularity: Order line; reported weekly by SKU class.
+    direction: higher_is_better
+    target: 0.95
+    thresholds: {green: 0.95, amber: 0.90}
+    owner: Supply Planner
+    source: Order lines (demand from UCI Online Retail II) + synthetic stock simulation
+    input: {table: order_lines, columns: [qty_ordered, qty_shipped]}
+    how_to_read: >-
+      Volume-weighted service. Big SKUs dominate it, so a good fill rate can
+      coexist with many small SKUs out of stock - read it next to stockout rate.
+    misreadings:
+      - Unit fill rate, line fill rate and order fill rate are three different KPIs; name which one.
+      - Lost sales that were never ordered (customer saw "out of stock") are invisible here.
+    related: [otif, stockout_rate, days_of_cover]
+    chart: {type: line, why: "Weekly trend against target with the stockout episodes annotated."}
+    dax: |-
+      DIVIDE ( SUM ( OrderLines[qty_shipped] ), SUM ( OrderLines[qty_ordered] ) )
+    sql: |-
+      SELECT CAST(SUM(qty_shipped) AS REAL) / SUM(qty_ordered) FROM order_lines
+
+  - id: otif
+    name: On time in full (OTIF)
+    case: inventory
+    question: How many orders arrived complete and on the promised date?
+    definition: >-
+      Orders whose every line was delivered no later than the promised date and
+      with the full quantity, divided by all orders.
+    formula: "count(orders with all lines on time AND in full) / count(orders)"
+    unit: percent
+    granularity: Order; reported weekly.
+    direction: higher_is_better
+    target: 0.90
+    thresholds: {green: 0.90, amber: 0.80}
+    owner: Logistics Manager
+    source: Order lines (demand from UCI Online Retail II) + synthetic stock simulation
+    input: {table: order_lines, columns: [order_id, qty_ordered, qty_shipped, promised_date, delivered_date]}
+    how_to_read: >-
+      The customer's view: one missing line fails the whole order. Always split
+      the failures into "late" and "short" - they have different owners.
+    misreadings:
+      - OTIF is much stricter than fill rate on multi-line orders; comparing the two numbers directly misleads.
+      - Using the requested date for some customers and the confirmed date for others changes the KPI silently.
+    related: [fill_rate, stockout_rate]
+    chart: {type: bar, why: "Failure decomposition (late / short / both) as a sorted bar."}
+    dax: |-
+      VAR _orders = VALUES ( OrderLines[order_id] )
+      VAR _ok =
+          COUNTROWS (
+              FILTER (
+                  _orders,
+                  CALCULATE (
+                      ISEMPTY (
+                          FILTER (
+                              OrderLines,
+                              OrderLines[qty_shipped] < OrderLines[qty_ordered]
+                                  || ISBLANK ( OrderLines[delivered_date] )
+                                  || OrderLines[delivered_date] > OrderLines[promised_date]
+                          )
+                      )
+                  )
+              )
+          )
+      RETURN DIVIDE ( _ok, COUNTROWS ( _orders ) )
+    sql: |-
+      SELECT CAST(SUM(ok) AS REAL) / COUNT(*) FROM (
+        SELECT order_id,
+               MIN(CASE WHEN qty_shipped >= qty_ordered AND delivered_date IS NOT NULL
+                         AND delivered_date <= promised_date THEN 1 ELSE 0 END) AS ok
+        FROM order_lines GROUP BY order_id)
+
+  - id: inventory_turnover
+    name: Inventory turnover
+    case: inventory
+    question: How many times a year does the stock we hold get sold?
+    definition: Annualised cost of goods sold divided by average inventory value.
+    formula: "(sum(cogs_value) * 365 / days) / mean_daily(sum(on_hand_value))"
+    unit: times_per_year
+    granularity: SKU x day; reported monthly by SKU class.
+    direction: higher_is_better
+    target: 8.0
+    thresholds: {green: 8.0, amber: 5.0}
+    owner: Inventory Controller
+    source: Synthetic stock simulation on public demand
+    input: {table: inventory_daily, columns: [date, on_hand_value, cogs_value]}
+    how_to_read: >-
+      Capital efficiency. Higher is better only up to the point where stockouts
+      start: read it together with fill rate.
+    misreadings:
+      - Using sales at price instead of cost in the numerator inflates turnover by the margin.
+      - Using year-end inventory instead of the average flatters companies that run down stock before closing.
+    related: [days_of_cover, obsolescence_share, fill_rate]
+    chart: {type: bar, why: "By SKU class (A/B/C) - the comparison that drives policy."}
+    dax: |-
+      VAR _days = DISTINCTCOUNT ( InventoryDaily[date] )
+      VAR _cogs = SUM ( InventoryDaily[cogs_value] )
+      VAR _avgInv = AVERAGEX ( VALUES ( InventoryDaily[date] ), CALCULATE ( SUM ( InventoryDaily[on_hand_value] ) ) )
+      RETURN DIVIDE ( _cogs * 365 / _days, _avgInv )
+    sql: |-
+      SELECT (SUM(cogs_value) * 365.0 / COUNT(DISTINCT date))
+             / (SELECT AVG(v) FROM (SELECT SUM(on_hand_value) AS v FROM inventory_daily GROUP BY date))
+      FROM inventory_daily
+
+  - id: days_of_cover
+    name: Days of cover
+    case: inventory
+    question: If demand continues as usual, how many days will current stock last?
+    definition: On-hand units at the last date divided by average daily demand over the window.
+    formula: "on_hand_units(last date) / (sum(demand_units) / days)"
+    unit: days
+    granularity: SKU; snapshot at period end.
+    direction: target_range
+    target: 21.0
+    thresholds: {green: [14.0, 35.0], amber: [7.0, 60.0]}
+    owner: Supply Planner
+    source: Synthetic stock simulation on public demand
+    input: {table: inventory_daily, columns: [date, on_hand_units, demand_units]}
+    how_to_read: >-
+      Too low means stockout risk before the next replenishment; too high means
+      tied-up capital and obsolescence risk. That is why it has a band, not a
+      direction.
+    misreadings:
+      - Using trailing demand for a seasonal item right before its season understates the risk.
+      - A fleet-level number nets SKUs with zero cover against SKUs with a year of cover.
+    related: [inventory_turnover, stockout_rate, obsolescence_share]
+    chart: {type: histogram, why: "Distribution of SKUs by cover with the green band shaded - shows both tails."}
+    dax: |-
+      VAR _last = MAX ( InventoryDaily[date] )
+      VAR _onHand = CALCULATE ( SUM ( InventoryDaily[on_hand_units] ), InventoryDaily[date] = _last )
+      VAR _avgDemand = DIVIDE ( SUM ( InventoryDaily[demand_units] ), DISTINCTCOUNT ( InventoryDaily[date] ) )
+      RETURN DIVIDE ( _onHand, _avgDemand )
+    sql: |-
+      SELECT (SELECT SUM(on_hand_units) FROM inventory_daily WHERE date = (SELECT MAX(date) FROM inventory_daily))
+             / (SUM(demand_units) * 1.0 / COUNT(DISTINCT date))
+      FROM inventory_daily
+
+  - id: stockout_rate
+    name: Stockout rate (SKU-days)
+    case: inventory
+    question: How often is an item simply not available?
+    definition: SKU-days with zero on-hand units at end of day divided by all SKU-days.
+    formula: "count(on_hand_units <= 0) / count(sku_days)"
+    unit: percent
+    granularity: SKU x day; reported weekly by SKU class.
+    direction: lower_is_better
+    target: 0.03
+    thresholds: {green: 0.03, amber: 0.06}
+    owner: Supply Planner
+    source: Synthetic stock simulation on public demand
+    input: {table: inventory_daily, columns: [on_hand_units]}
+    how_to_read: >-
+      Unweighted by volume, so it shows breadth: many small SKUs out of stock
+      raise it even when fill rate stays high.
+    misreadings:
+      - End-of-day stock misses intraday stockouts; for fast movers it understates the problem.
+      - Including discontinued SKUs inflates it - filter to active assortment.
+    related: [fill_rate, days_of_cover]
+    chart: {type: heatmap, why: "SKU x week grid reveals clusters of stockouts in time."}
+    dax: |-
+      DIVIDE (
+          CALCULATE ( COUNTROWS ( InventoryDaily ), InventoryDaily[on_hand_units] <= 0 ),
+          COUNTROWS ( InventoryDaily )
+      )
+    sql: |-
+      SELECT CAST(SUM(CASE WHEN on_hand_units <= 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) FROM inventory_daily
+
+  - id: obsolescence_share
+    name: Obsolete stock share
+    case: inventory
+    question: How much of our inventory value has stopped moving?
+    definition: Value of stock with no movement for more than the age limit divided by total stock value.
+    formula: "sum(on_hand_value where days_since_last_movement > age_limit_days) / sum(on_hand_value)"
+    unit: percent
+    granularity: SKU; snapshot at month end.
+    direction: lower_is_better
+    target: 0.05
+    thresholds: {green: 0.05, amber: 0.10}
+    params: {age_limit_days: 180}
+    owner: Inventory Controller
+    source: Synthetic stock simulation on public demand
+    input: {table: inventory_snapshot, columns: [on_hand_value, days_since_last_movement]}
+    how_to_read: >-
+      Capital at risk of write-off. It grows quietly after over-forecast seasons,
+      so read it with forecast bias.
+    misreadings:
+      - Counting a single unit sold as "movement" resets the clock on a pallet of dead stock; consider coverage too.
+    related: [forecast_bias, days_of_cover, inventory_turnover]
+    chart: {type: bar, why: "Value by age bucket (sorted) - shows how much sits beyond the limit."}
+    dax: |-
+      DIVIDE (
+          CALCULATE ( SUM ( InventorySnapshot[on_hand_value] ), InventorySnapshot[days_since_last_movement] > ${age_limit_days} ),
+          SUM ( InventorySnapshot[on_hand_value] )
+      )
+    sql: |-
+      SELECT SUM(CASE WHEN days_since_last_movement > ${age_limit_days} THEN on_hand_value ELSE 0 END) / SUM(on_hand_value)
+      FROM inventory_snapshot
+
+  - id: mape
+    name: Forecast error (MAPE)
+    case: inventory
+    question: On average, by what percentage does each item's forecast miss?
+    definition: Mean of |actual - forecast| / actual over SKU-periods with actual > 0.
+    formula: "mean(|A - F| / A) for A > 0"
+    unit: percent
+    granularity: SKU x week.
+    direction: lower_is_better
+    target: 0.40
+    thresholds: {green: 0.40, amber: 0.60}
+    owner: Demand Planner
+    source: Demand (UCI Online Retail II) + baseline forecast computed in this repo
+    input: {table: forecast, columns: [actual_units, forecast_units]}
+    how_to_read: >-
+      Every SKU-week weighs the same, so slow movers dominate. Use it to judge
+      forecastability of the long tail, not overall planning quality.
+    misreadings:
+      - Undefined when actual = 0 (those rows are dropped here - say so) and explodes on tiny actuals.
+      - Asymmetric - over-forecasts can exceed 100% error while under-forecasts cap at 100%.
+      - Comparing MAPE across portfolios with different volume mix; use WAPE for that.
+    related: [wape, forecast_bias]
+    chart: {type: bar, why: "MAPE vs WAPE side by side per SKU class makes the volume effect visible."}
+    dax: |-
+      AVERAGEX (
+          FILTER ( Forecast, Forecast[actual_units] > 0 ),
+          ABS ( Forecast[actual_units] - Forecast[forecast_units] ) / Forecast[actual_units]
+      )
+    sql: |-
+      SELECT AVG(ABS(actual_units - forecast_units) * 1.0 / actual_units) FROM forecast WHERE actual_units > 0
+
+  - id: wape
+    name: Forecast error (WAPE)
+    case: inventory
+    question: Of all the units we sold, how many did the forecast get wrong?
+    definition: Sum of absolute errors divided by sum of actuals.
+    formula: "sum(|A - F|) / sum(A)"
+    unit: percent
+    granularity: SKU x week; rolled up by SKU class.
+    direction: lower_is_better
+    target: 0.30
+    thresholds: {green: 0.30, amber: 0.45}
+    owner: Demand Planner
+    source: Demand (UCI Online Retail II) + baseline forecast computed in this repo
+    input: {table: forecast, columns: [actual_units, forecast_units]}
+    how_to_read: >-
+      Volume-weighted: big SKUs dominate, which is what inventory and service
+      feel. The headline planning-accuracy KPI.
+    misreadings:
+      - Computed at a high aggregation level, errors cancel out (SKU A over, SKU B under); compute at SKU level, then sum.
+    related: [mape, forecast_bias]
+    chart: {type: line, why: "Weekly trend; seasonal peaks annotated."}
+    dax: |-
+      DIVIDE (
+          SUMX ( Forecast, ABS ( Forecast[actual_units] - Forecast[forecast_units] ) ),
+          SUM ( Forecast[actual_units] )
+      )
+    sql: |-
+      SELECT SUM(ABS(actual_units - forecast_units)) * 1.0 / SUM(actual_units) FROM forecast
+
+  - id: forecast_bias
+    name: Forecast bias
+    case: inventory
+    question: Do we systematically forecast too much or too little?
+    definition: (Sum of forecast - sum of actuals) / sum of actuals. Positive = over-forecast.
+    formula: "(sum(F) - sum(A)) / sum(A)"
+    unit: percent
+    granularity: SKU x week; rolled up by SKU class and month.
+    direction: target_range
+    target: 0.0
+    thresholds: {green: [-0.05, 0.05], amber: [-0.10, 0.10]}
+    owner: Demand Planner
+    source: Demand (UCI Online Retail II) + baseline forecast computed in this repo
+    input: {table: forecast, columns: [actual_units, forecast_units]}
+    how_to_read: >-
+      Error you can fix. Accuracy (WAPE) says how big the miss is; bias says in
+      which direction. Persistent positive bias builds excess and obsolete stock;
+      negative bias builds stockouts.
+    misreadings:
+      - A bias near zero can hide large errors that cancel out; never read it without WAPE.
+    related: [wape, obsolescence_share, stockout_rate]
+    chart: {type: bar, why: "Diverging bars by month around zero with the green band shaded."}
+    dax: |-
+      DIVIDE (
+          SUM ( Forecast[forecast_units] ) - SUM ( Forecast[actual_units] ),
+          SUM ( Forecast[actual_units] )
+      )
+    sql: |-
+      SELECT (SUM(forecast_units) - SUM(actual_units)) * 1.0 / SUM(actual_units) FROM forecast
+
+  # ---------------------------------------------------------------- CUSTOMERS
+  - id: retention_rate
+    name: Customer retention (quarter over quarter)
+    case: customers
+    question: Of the customers who bought last quarter, how many bought again this quarter?
+    definition: >-
+      Customers active in both the previous and the current period divided by
+      customers active in the previous period.
+    formula: "|active(t-1) ∩ active(t)| / |active(t-1)|"
+    unit: percent
+    granularity: Customer x quarter.
+    direction: higher_is_better
+    target: 0.50
+    thresholds: {green: 0.50, amber: 0.40}
+    params: {period: QUARTER}
+    owner: Customer Success / CRM Lead
+    source: Transactions (UCI Online Retail II)
+    input: {table: sales, columns: [customer_id, invoice_date]}
+    how_to_read: >-
+      The base of recurring revenue. Read it by acquisition cohort: a stable
+      overall rate can hide new cohorts churning faster.
+    misreadings:
+      - Period length changes the number completely (monthly < quarterly < yearly); always state the period.
+      - Anonymous transactions (no customer id) are excluded - if that share changes, retention moves for no business reason.
+    related: [repeat_purchase_rate, revenue_at_risk_share]
+    chart: {type: line, why: "Quarterly trend; a cohort heatmap is the deeper view."}
+    dax: |-
+      VAR _current = VALUES ( Sales[customer_id] )
+      VAR _previous = CALCULATETABLE ( VALUES ( Sales[customer_id] ), DATEADD ( 'Date'[Date], -1, ${period} ) )
+      RETURN DIVIDE ( COUNTROWS ( INTERSECT ( _previous, _current ) ), COUNTROWS ( _previous ) )
+
+  - id: repeat_purchase_rate
+    name: Repeat purchase rate
+    case: customers
+    question: What share of customers come back for a second order?
+    definition: Customers with two or more distinct invoices in the window divided by customers with at least one.
+    formula: "count(customers with invoices >= 2) / count(customers)"
+    unit: percent
+    granularity: Customer; window of 12 months.
+    direction: higher_is_better
+    target: 0.60
+    thresholds: {green: 0.60, amber: 0.50}
+    owner: CRM Lead
+    source: Transactions (UCI Online Retail II)
+    input: {table: sales, columns: [customer_id, invoice_id]}
+    how_to_read: >-
+      Is the first purchase turning into a relationship? Customers acquired at
+      the end of the window have had less time to repeat - compare like with like.
+    misreadings:
+      - Counting invoice lines instead of distinct invoices makes every multi-item basket a "repeat".
+    related: [retention_rate, revenue_at_risk_share]
+    chart: {type: bar, why: "By acquisition cohort, against the target line."}
+    dax: |-
+      VAR _c = ADDCOLUMNS ( VALUES ( Sales[customer_id] ), "@orders", CALCULATE ( DISTINCTCOUNT ( Sales[invoice_id] ) ) )
+      RETURN DIVIDE ( COUNTROWS ( FILTER ( _c, [@orders] >= 2 ) ), COUNTROWS ( _c ) )
+    sql: |-
+      SELECT CAST(SUM(CASE WHEN n >= 2 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+      FROM (SELECT customer_id, COUNT(DISTINCT invoice_id) AS n FROM sales GROUP BY customer_id)
+
+  - id: revenue_at_risk_share
+    name: Revenue at risk (RFM "At risk")
+    case: customers
+    question: How much of our revenue comes from good customers who have stopped buying?
+    definition: >-
+      Revenue in the look-back window from customers in the RFM "At risk"
+      segment (high frequency/monetary score, low recency score) divided by total revenue.
+    formula: "sum(monetary where segment = 'At risk') / sum(monetary)"
+    unit: percent
+    granularity: Customer; recomputed monthly on a 12-month window.
+    direction: lower_is_better
+    target: 0.10
+    thresholds: {green: 0.10, amber: 0.20}
+    owner: CRM Lead
+    source: Transactions (UCI Online Retail II), RFM scoring in this repo
+    input: {table: customer_rfm, columns: [segment, monetary]}
+    how_to_read: >-
+      The size of the win-back opportunity. The segment list is the action list:
+      call the top customers by monetary value first.
+    misreadings:
+      - RFM scores are quintiles of this dataset - an "At risk" label is relative, not absolute.
+      - Recency depends on the snapshot date; recompute on a fixed calendar to keep it comparable.
+    related: [retention_rate, repeat_purchase_rate, nps]
+    chart: {type: bar, why: "Revenue by segment, sorted, with the At-risk bar highlighted."}
+    dax: |-
+      DIVIDE (
+          CALCULATE ( SUM ( Sales[revenue] ), Customers[rfm_segment] = "At risk" ),
+          SUM ( Sales[revenue] )
+      )
+    sql: |-
+      SELECT SUM(CASE WHEN segment = 'At risk' THEN monetary ELSE 0 END) / SUM(monetary) FROM customer_rfm
+
+  - id: nps
+    name: Net Promoter Score (simulated survey)
+    case: customers
+    question: Would our customers recommend us?
+    definition: >-
+      Percentage of promoters (score 9-10) minus percentage of detractors
+      (score 0-6) among respondents. Passives (7-8) count in the denominator only.
+    formula: "100 * (count(score >= 9) - count(score <= 6)) / count(responses)"
+    unit: score
+    granularity: Survey response; reported monthly with its sample size.
+    direction: higher_is_better
+    target: 30.0
+    thresholds: {green: 30.0, amber: 10.0}
+    owner: Customer Experience Lead
+    source: Simulated survey (synthetic generator)
+    input: {table: survey, columns: [score]}
+    how_to_read: >-
+      A range from -100 to +100, not a percentage and not an average. With small
+      samples the confidence interval is wide; show n next to it.
+    misreadings:
+      - Averaging the 0-10 scores (e.g. 7.8/10) is not NPS and hides polarisation.
+      - Averaging segment NPS values without weighting by respondents gives the wrong total.
+      - Treating a 3-point monthly change as real when the margin of error is +/- 8 points.
+    related: [revenue_at_risk_share, retention_rate]
+    chart: {type: bar, why: "Stacked 100% bar with the three groups (only three parts) plus the score as a label."}
+    dax: |-
+      VAR _n = COUNTROWS ( Survey )
+      VAR _p = CALCULATE ( COUNTROWS ( Survey ), Survey[score] >= 9 )
+      VAR _d = CALCULATE ( COUNTROWS ( Survey ), Survey[score] <= 6 )
+      RETURN DIVIDE ( _p - _d, _n ) * 100
+    sql: |-
+      SELECT 100.0 * (SUM(CASE WHEN score >= 9 THEN 1 ELSE 0 END) - SUM(CASE WHEN score <= 6 THEN 1 ELSE 0 END)) / COUNT(*)
+      FROM survey
+
+  # ------------------------------------------------------------- DATA QUALITY
+  - id: dq_completeness
+    name: Completeness
+    case: data_quality
+    question: Are the fields we need actually filled in?
+    definition: Non-null cells in the required columns divided by all required cells.
+    formula: "count(non-null required cells) / (rows * required columns)"
+    unit: percent
+    granularity: Dataset x load; required columns defined in kpis/dq_rules.yaml.
+    direction: higher_is_better
+    target: 0.99
+    thresholds: {green: 0.99, amber: 0.95}
+    owner: Data Steward
+    source: All datasets of this repository (rules in kpis/dq_rules.yaml)
+    input: {table: any, columns: []}
+    how_to_read: >-
+      Measured only on the columns a KPI depends on. A missing customer id is a
+      business problem the moment retention is computed without it.
+    misreadings:
+      - Measuring completeness over every column dilutes the critical ones; scope it to required fields.
+      - Placeholder values ("N/A", 0, "unknown") count as filled; pair completeness with validity.
+    related: [dq_validity, dq_uniqueness]
+    chart: {type: heatmap, why: "Dataset x dimension grid with thresholds - one glance for the data owner."}
+    dax: |-
+      DIVIDE (
+          CALCULATE ( SUM ( DQResults[passed] ), DQResults[dimension] = "completeness" ),
+          CALCULATE ( SUM ( DQResults[total] ), DQResults[dimension] = "completeness" )
+      )
+
+  - id: dq_uniqueness
+    name: Uniqueness
+    case: data_quality
+    question: Is each real-world record stored exactly once?
+    definition: Distinct business keys divided by rows.
+    formula: "count(distinct key) / count(rows)"
+    unit: percent
+    granularity: Dataset x load; key defined in kpis/dq_rules.yaml.
+    direction: higher_is_better
+    target: 1.0
+    thresholds: {green: 0.999, amber: 0.99}
+    owner: Data Steward
+    source: All datasets of this repository (rules in kpis/dq_rules.yaml)
+    input: {table: any, columns: []}
+    how_to_read: >-
+      Duplicates silently inflate counts: one duplicated ticket is one extra
+      "resolved" ticket in every service KPI.
+    misreadings:
+      - Exact-row duplicates are only part of it; the same entity under two keys needs fuzzy matching.
+    related: [dq_completeness]
+    chart: {type: heatmap, why: "Same grid as the other dimensions so they can be compared."}
+    dax: |-
+      DIVIDE (
+          CALCULATE ( SUM ( DQResults[passed] ), DQResults[dimension] = "uniqueness" ),
+          CALCULATE ( SUM ( DQResults[total] ), DQResults[dimension] = "uniqueness" )
+      )
+
+  - id: dq_validity
+    name: Validity
+    case: data_quality
+    question: Do the values respect the business rules?
+    definition: Rows passing every validity rule of the dataset divided by rows.
+    formula: "count(rows passing all rules) / count(rows)"
+    unit: percent
+    granularity: Dataset x load; rules defined in kpis/dq_rules.yaml.
+    direction: higher_is_better
+    target: 0.98
+    thresholds: {green: 0.98, amber: 0.95}
+    owner: Data Steward
+    source: All datasets of this repository (rules in kpis/dq_rules.yaml)
+    input: {table: any, columns: []}
+    how_to_read: >-
+      Rules encode business meaning (quantity > 0, resolved after created).
+      Each failing rule is a ticket for the source system owner.
+    misreadings:
+      - A row can fail several rules; report rows, not rule failures, or the percentage can go negative.
+    related: [dq_completeness]
+    chart: {type: bar, why: "Failures by rule, sorted - the fix list."}
+    dax: |-
+      DIVIDE (
+          CALCULATE ( SUM ( DQResults[passed] ), DQResults[dimension] = "validity" ),
+          CALCULATE ( SUM ( DQResults[total] ), DQResults[dimension] = "validity" )
+      )
+
+  - id: dq_timeliness
+    name: Timeliness
+    case: data_quality
+    question: Is the data available soon enough after the event to act on it?
+    definition: Records loaded within the allowed delay after the business event divided by records.
+    formula: "count(loaded_at - event_at <= max_delay_hours) / count(rows)"
+    unit: percent
+    granularity: Dataset x load; event and load columns defined in kpis/dq_rules.yaml.
+    direction: higher_is_better
+    target: 0.95
+    thresholds: {green: 0.95, amber: 0.90}
+    owner: Data Engineer
+    source: Datasets that carry a load timestamp (rules in kpis/dq_rules.yaml)
+    input: {table: any, columns: []}
+    how_to_read: >-
+      Late data makes leading indicators lag. Datasets without a load timestamp
+      cannot be measured - that absence is itself a finding.
+    misreadings:
+      - Freshness of the latest record is not timeliness of all records; late back-dated entries hide behind a fresh max date.
+    related: [dq_completeness]
+    chart: {type: heatmap, why: "Same grid as the other dimensions."}
+    dax: |-
+      DIVIDE (
+          CALCULATE ( SUM ( DQResults[passed] ), DQResults[dimension] = "timeliness" ),
+          CALCULATE ( SUM ( DQResults[total] ), DQResults[dimension] = "timeliness" )
+      )

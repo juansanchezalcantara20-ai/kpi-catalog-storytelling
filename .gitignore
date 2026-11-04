@@ -1,0 +1,13 @@
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+/data/raw/
+/data/processed/
+/site/
+# Generated MkDocs pages (rebuilt by `make site`)
+docs/cases/
+docs/catalog/
+docs/antipatterns.md
+docs/data-sources.md

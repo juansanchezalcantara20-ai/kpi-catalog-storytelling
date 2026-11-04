@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kpistory"
+version = "1.0.0"
+description = "One KPI catalog, one calculation engine, two presentation layers (static site + Power BI)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Juan Luis Sánchez Alcántara" }]
+dependencies = [
+  "pandas>=2.1",
+  "numpy>=1.26",
+  "pyyaml>=6",
+  "jsonschema>=4.20",
+  "plotly>=5.20",
+  "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+site = ["mkdocs>=1.6", "mkdocs-material>=9.5"]
+dev = ["pytest>=8", "ruff>=0.6", "mkdocs>=1.6", "mkdocs-material>=9.5"]
+
+[project.scripts]
+kpistory = "kpistory.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
