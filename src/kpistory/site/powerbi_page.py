@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..engine import Engine, format_threshold
-from ..powerbi.export import FORMAT, HOME_TABLE, RELATIONSHIPS, measure_name
+from ..powerbi.export import DATA_URL, FORMAT, HOME_TABLE, RELATIONSHIPS, measure_name
 
 REPO = "https://github.com/juansanchezalcantara20-ai/kpi-catalog-storytelling/blob/main"
 
@@ -23,7 +23,7 @@ def build(engine: Engine) -> str:
         f"| [`powerbi/MODEL.md`]({REPO}/powerbi/MODEL.md) | Star schema: fact and dimension tables, columns and types, {len(RELATIONSHIPS)} relationships |\n"
         f"| [`powerbi/BUILD_CHECKLIST.md`]({REPO}/powerbi/BUILD_CHECKLIST.md) | Step-by-step assembly in Power BI Desktop, including a reconciliation step |\n"
         f"| [`powerbi/theme.json`]({REPO}/powerbi/theme.json) | The site's palette as a Power BI report theme |\n"
-        "| `powerbi/data/*.csv` | The model tables and `expected_values.csv` (Python results), written by `make data powerbi` |\n",
+        f"| [`data/powerbi/*.csv`]({DATA_URL}/manifest.json) on this site | The model tables and `expected_values.csv` (Python results), rebuilt by GitHub Actions on every push - load them in Power BI with *Get data → Web* |\n",
         "## Why this proves the point of the repository\n",
         "The DAX below is not written for Power BI: it is stored in `kpis/catalog.yaml` next to the definition, "
         "the Python function and the SQL. Parameters such as the 7-day backlog limit are substituted from the "

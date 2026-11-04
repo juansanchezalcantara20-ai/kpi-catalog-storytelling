@@ -25,6 +25,9 @@ from ..engine import format_threshold, format_value
 from ..paths import POWERBI_DIR, PROCESSED_DIR
 from ..viz import theme
 
+PAGES_URL = "https://juansanchezalcantara20-ai.github.io/kpi-catalog-storytelling"
+DATA_URL = f"{PAGES_URL}/data/powerbi"
+
 HEADER = "// GENERATED FROM kpis/catalog.yaml by `kpistory powerbi` - do not edit by hand.\n"
 
 FORMAT = {
@@ -215,17 +218,20 @@ What exists in this folder was **generated from the catalog but never opened in 
 (Desktop does not run in the environment where this repository was built). Follow these steps on
 Windows to assemble the report; the measures and the model are ready, the pages are yours to design.
 
-## 1 · Get the data (5 min)
+Everything except Power BI Desktop itself runs in the cloud: GitHub Actions downloads the data, computes
+the tables and publishes them with the website. Nothing has to be installed or run on your PC besides Desktop.
 
-- [ ] `pip install -e ".[dev]"`
-- [ ] `make data powerbi` (or `python -m kpistory data` then `python -m kpistory powerbi`).
-      On a normal network this downloads the real UCI files; otherwise plan B data is used.
-      Check `data/processed/manifest.json` to see which.
-- [ ] Confirm `powerbi/data/` contains {len(MODEL) + 1} CSV files plus `expected_values.csv`.
+## 1 · Get the data from the cloud (2 min)
+
+- [ ] Open `{DATA_URL}/manifest.json` to see whether the last build used the real UCI files or plan B.
+- [ ] The model tables are published at `{DATA_URL}/<Table>.csv`:
+      {", ".join(["Date"] + [t.name for t in MODEL])}, plus `expected_values.csv`.
+- [ ] Alternative: download the `powerbi-layer` artifact from the latest *Publish site* run in GitHub Actions.
 
 ## 2 · Load and type the tables (15 min)
 
-- [ ] Get data > Text/CSV for each file in `powerbi/data/` (or Get data > Folder and split by file name).
+- [ ] Get data > **Web** > `{DATA_URL}/Tickets.csv`, and the same for every table above
+      (the URLs refresh on every push to `main`, so a scheduled refresh in Power BI Service also works).
 - [ ] In Power Query set the column types listed in `MODEL.md` (dates as *Date*, booleans as *True/False*).
 - [ ] Load `Date.csv`, then Table tools > **Mark as date table** on `Date[Date]`.
 

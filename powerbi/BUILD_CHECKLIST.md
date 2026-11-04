@@ -5,17 +5,20 @@ What exists in this folder was **generated from the catalog but never opened in 
 (Desktop does not run in the environment where this repository was built). Follow these steps on
 Windows to assemble the report; the measures and the model are ready, the pages are yours to design.
 
-## 1 · Get the data (5 min)
+Everything except Power BI Desktop itself runs in the cloud: GitHub Actions downloads the data, computes
+the tables and publishes them with the website. Nothing has to be installed or run on your PC besides Desktop.
 
-- [ ] `pip install -e ".[dev]"`
-- [ ] `make data powerbi` (or `python -m kpistory data` then `python -m kpistory powerbi`).
-      On a normal network this downloads the real UCI files; otherwise plan B data is used.
-      Check `data/processed/manifest.json` to see which.
-- [ ] Confirm `powerbi/data/` contains 14 CSV files plus `expected_values.csv`.
+## 1 · Get the data from the cloud (2 min)
+
+- [ ] Open `https://juansanchezalcantara20-ai.github.io/kpi-catalog-storytelling/data/powerbi/manifest.json` to see whether the last build used the real UCI files or plan B.
+- [ ] The model tables are published at `https://juansanchezalcantara20-ai.github.io/kpi-catalog-storytelling/data/powerbi/<Table>.csv`:
+      Date, Tickets, WorkOrders, AssetPeriods, OrderLines, InventoryDaily, InventorySnapshot, Forecast, Sales, Survey, DQResults, Customers, Assets, Products, plus `expected_values.csv`.
+- [ ] Alternative: download the `powerbi-layer` artifact from the latest *Publish site* run in GitHub Actions.
 
 ## 2 · Load and type the tables (15 min)
 
-- [ ] Get data > Text/CSV for each file in `powerbi/data/` (or Get data > Folder and split by file name).
+- [ ] Get data > **Web** > `https://juansanchezalcantara20-ai.github.io/kpi-catalog-storytelling/data/powerbi/Tickets.csv`, and the same for every table above
+      (the URLs refresh on every push to `main`, so a scheduled refresh in Power BI Service also works).
 - [ ] In Power Query set the column types listed in `MODEL.md` (dates as *Date*, booleans as *True/False*).
 - [ ] Load `Date.csv`, then Table tools > **Mark as date table** on `Date[Date]`.
 

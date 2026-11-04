@@ -100,3 +100,11 @@ decisions are appended at the end of each phase.
 | 61 | The README maps each requirement of the target job descriptions to a concrete file or page ("What this demonstrates"). | Five-minute review: claims are verifiable by clicking. |
 | 62 | "How this was built" and "Scope & limitations" are explicit about Claude Code, synthetic data, illustrative targets and the unexecuted Power BI layer. | Honesty is part of the method being demonstrated. |
 | 63 | The repository and Pages URLs assume the name `kpi-catalog-storytelling` under `juansanchezalcantara20-ai`. | The build session had no repository attached; if the name differs, update `mkdocs.yml` (`repo_url`) and the README links. |
+
+## Phase 8 · Cloud-only development
+
+| # | Decision | Why |
+|---|----------|-----|
+| 64 | **All development and builds run in the cloud**: GitHub Actions for CI and publishing, GitHub Codespaces (`.devcontainer/`) for editing and previewing. | Requirement: no local setup. The devcontainer installs the package and runs `make all`, so a Codespace is ready to work in minutes. |
+| 65 | The Pages workflow **publishes the Power BI model tables** (`/data/powerbi/*.csv` + `manifest.json`) and uploads a `powerbi-layer` artifact. | Power BI Desktop loads them with *Get data → Web*; no Python on the PC, and the tables come from the same cloud build (with the real UCI data when reachable) as the website. |
+| 66 | Power BI Desktop remains the only local step. | It is a Windows desktop application; the cloud equivalents (Power BI Service) cannot create measures from a DAX script without a desktop-authored model. |

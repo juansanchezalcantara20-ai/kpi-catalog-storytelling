@@ -1,0 +1,15 @@
+{
+  "name": "kpi-catalog-storytelling",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "postCreateCommand": "pip install -e '.[dev]' && make all SOURCE=auto",
+  "forwardPorts": [8000],
+  "portsAttributes": { "8000": { "label": "Site (mkdocs serve)", "onAutoForward": "openPreview" } },
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "charliermarsh.ruff", "redhat.vscode-yaml"],
+      "settings": {
+        "yaml.schemas": { "kpis/catalog.schema.json": "kpis/catalog.yaml" }
+      }
+    }
+  }
+}

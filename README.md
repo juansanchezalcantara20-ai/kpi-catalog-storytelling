@@ -79,7 +79,18 @@ data (UCI or plan B) ─► kpistory.data ─► kpistory.engine ─┬─► kp
   the arithmetic written out and the expected value; the same examples run against the Python engine and the
   SQL, and appear on each KPI page of the site as a worked example.
 
-## Run it
+## Run it - in the cloud
+
+Nothing has to run on a local machine:
+
+- **GitHub Actions** runs everything on every push: `CI` (lint, tests, catalog validation, a full offline build)
+  and, on `main`, `Publish site` (real UCI downloads with plan-B fallback, pages, Power BI tables, GitHub Pages).
+  The Power BI tables are published at `/data/powerbi/*.csv` on the site and as the `powerbi-layer` artifact.
+- **GitHub Codespaces** is the development environment: *Code → Codespaces → Create codespace* opens a
+  container defined in [`.devcontainer/`](.devcontainer/devcontainer.json) that installs the package, runs
+  `make all` and forwards the site preview on port 8000.
+
+Inside the Codespace (or any machine):
 
 ```bash
 pip install -e ".[dev]"
@@ -100,7 +111,8 @@ Individual steps: `make test`, `make validate`, `make data`, `make site`, `make 
 
 `powerbi/` contains **`measures.dax`** (all 28 measures, ready for DAX query view), **`MODEL.md`** (star schema:
 13 tables + Date, 16 relationships), **`BUILD_CHECKLIST.md`** and **`theme.json`**; `make data powerbi` writes the
-model tables and the Python results to reconcile against (`powerbi/data/`).
+model tables and the Python results to reconcile against (`powerbi/data/`). In the cloud workflow these
+tables are published with the site, so Power BI loads them with *Get data → Web* and nothing else runs locally.
 
 **These files were generated from the catalog but not executed in Power BI Desktop**, which does not run in
 the environment where the repository was built. A PBIP/TMDL project was deliberately not generated because
