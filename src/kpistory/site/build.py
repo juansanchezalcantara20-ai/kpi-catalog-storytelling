@@ -12,7 +12,7 @@ from ..data.pipeline import load_tables
 from ..engine import Engine
 from ..paths import DOCS_DIR
 from . import catalog_pages
-from .current import current_values
+from .current import headline
 from .data_sources import page as data_sources_page
 
 CASES = ["service", "maintenance", "inventory", "customers", "data_quality"]
@@ -23,6 +23,7 @@ def _copy_plotly_js() -> None:
     dst = DOCS_DIR / "assets" / "js" / "plotly.min.js"
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, dst)
+    shutil.copyfile(Path(__file__).parent / "assets" / "plotly-es.js", dst.parent / "plotly-es.js")
 
 
 def build() -> None:
@@ -50,6 +51,6 @@ def build() -> None:
         print("  page antipatterns.md")
     except ModuleNotFoundError:
         pass
-    catalog_pages.write(engine, current_values(tables, engine), DOCS_DIR / "catalog", built)
+    catalog_pages.write(engine, headline(tables, engine, manifest), DOCS_DIR / "catalog")
     (DOCS_DIR / "data-sources.md").write_text(data_sources_page(manifest), encoding="utf-8")
     print(f"  catalog pages: {len(engine.catalog) + 1}; data-sources.md")

@@ -1,110 +1,62 @@
-# Decision log
+# Decisiones del proyecto
 
-Every non-obvious choice in this repository, with the reason behind it. Newest
-decisions are appended at the end of each phase.
+Cada decisión que no es obvia, con su motivo. Están agrupadas por etapa del proyecto.
 
-## Phase 1 · Catalog, engine, tests, CI
+## 1 · Catálogo, motor de cálculo y pruebas
 
-| # | Decision | Why |
-|---|----------|-----|
-| 1 | **`kpis/catalog.yaml` is the single source of truth**, validated by a JSON Schema plus semantic checks in `kpistory.catalog`. | A schema catches typos and missing fields; semantic checks catch what a schema cannot (thresholds contradicting the direction, related KPIs that do not exist, params referenced in SQL that are not declared). |
-| 2 | **One Python function per KPI**, registered with `@kpi("<id>")`. Validation fails if a catalog KPI has no function or a function has no catalog entry. | "Nothing is defined twice" has to be enforced by code, not by discipline. |
-| 3 | Functions never contain targets, thresholds or parameters. Parameters (e.g. the 7-day backlog limit) live in `params:` and are substituted into SQL as `${name}`. | Changing a business rule is a one-line edit in the catalog that propagates to Python and SQL. |
-| 4 | Reference SQL is stored next to the definition in the catalog rather than generated from a formula mini-language. | A DSL expressive enough for OTIF, retention and RFM would be harder to read than the SQL itself. Tests verify that Python and SQL agree on the hand examples. |
-| 5 | **Ratios are stored as fractions**, displayed as percentages. | Avoids the classic \"is 0.9 ninety percent or 0.9 percent?\" bug between layers; formatting happens only at display time. |
-| 6 | Three directions: `higher_is_better`, `lower_is_better`, **`target_range`**. | Days of cover and forecast bias are bad in both directions; forcing them into "higher/lower is better" teaches the wrong reading. |
-| 7 | Traffic-light boundaries are inclusive on the green side (SLA ≥ 90% is green). | Matches how targets are usually worded ("at least 90%") and is pinned by a test. |
-| 8 | Empty denominators return NaN (shown as "n/a"), never 0. | Same semantics as SQL `NULLIF` division; a 0% SLA in a week with no tickets is a false alarm. |
-| 9 | **MTTR is kept as a mean** (not a median). The median and the tail are shown next to it. | The identity Availability = MTBF / (MTBF + MTTR) only holds with means. The misreading is documented instead of redefining the KPI. |
-| 10 | Resolution and first-response time **are medians** by definition. | They are customer-experience KPIs with heavy right tails; no identity depends on them, so the robust statistic wins. |
-| 11 | Every KPI has a **hand-calculated example** (`tests/hand_examples.py`) with the expected value and the arithmetic written out. The same examples run against the reference SQL on SQLite. | Hand examples are the cheapest proof that a formula means what the definition says; running them through two implementations catches definition drift. |
-| 12 | The chart-type enum in the schema **does not contain `pie`**. | The catalog recommends charts; it should not be able to recommend the chart the style rules ban. |
-| 13 | RFM is a helper (segmentation), and the catalog KPI is **revenue at risk** (share of revenue in the "At risk" segment). | A segmentation is not a number with a target; the share of revenue at risk is, and it triggers a decision (win-back campaign). |
-| 14 | NPS is computed as % promoters − % detractors on a −100…+100 scale, with a margin-of-error helper. | The two most common NPS errors are averaging the 0–10 scores and over-reading small samples; both are tested. |
-| 15 | Data-quality KPIs are generic functions; the per-dataset rules live in `kpis/dq_rules.yaml`. | Lets the same four dimensions be measured on every dataset of the repo, which is the point of case 5. |
-| 16 | Package layout `src/kpistory`, `pyproject.toml`, `ruff` for lint + format, `pytest`, a `Makefile` with `make all`. | Standard, boring and reproducible. `make all` is the single command that rebuilds everything. |
+| Decisión | Por qué |
+|---|---|
+| Un solo archivo de catálogo es la única fuente de verdad de los indicadores, y se valida automáticamente. | Si un indicador se define en dos lugares, tarde o temprano los dos dicen cosas distintas. La validación revisa que no falten campos, que la meta sea coherente con el sentido del indicador y que los indicadores relacionados existan. |
+| Cada indicador tiene una sola función de cálculo, y la validación falla si falta alguna o sobra alguna. | «Nada se define dos veces» tiene que cumplirse por diseño, no por disciplina. |
+| Los parámetros (por ejemplo, el límite de 7 días de las pendientes) se escriben una sola vez en el catálogo. | Cambiar una regla de negocio es cambiar una línea, y el cambio llega a todo el cálculo. |
+| Cada indicador tiene también una consulta SQL de referencia al lado de su definición. | Permite comprobar con dos implementaciones distintas que la fórmula significa lo que dice la definición. |
+| Las proporciones se guardan como fracción y se muestran como porcentaje con un solo formato («89.2 %»). | Evita el error de no saber si 0.9 es 90 % o 0.9 %, y da un formato único en todo el sitio. |
+| Hay tres sentidos posibles: más alto es mejor, más bajo es mejor y dentro de una franja. | Los días de cobertura y el sesgo del pronóstico son malos tanto si son muy altos como si son muy bajos. |
+| El límite de la meta cuenta como cumplido (90 % con meta de 90 % está en meta). | Así se escriben las metas («al menos 90 %») y una prueba lo fija. |
+| Si no hay datos para calcular, el resultado es «Sin dato», nunca cero. | Un 0 % de cumplimiento en una semana sin solicitudes sería una falsa alarma. |
+| El tiempo medio de reparación se mantiene como promedio y siempre se muestra junto a la reparación típica. | Solo con promedios se cumple que la disponibilidad depende del tiempo entre fallas y del tiempo de reparación; el error de lectura se documenta en vez de cambiar la definición. |
+| Los tiempos de respuesta y de resolución usan la solicitud típica (mediana). | Son tiempos con colas largas y no hay ninguna identidad que dependa de ellos. |
+| Cada indicador tiene un ejemplo calculado a mano, con el resultado escrito, que se comprueba contra el cálculo y contra la consulta SQL. | Es la forma más barata de demostrar que una fórmula hace lo que dice. Los mismos ejemplos aparecen en cada ficha del catálogo. |
+| El catálogo no puede recomendar gráficos de torta. | El catálogo recomienda gráficos; no debe poder recomendar el que las reglas de estilo prohíben. |
+| La segmentación de clientes es una herramienta; el indicador es el ingreso en riesgo. | Una segmentación no tiene meta; la parte del ingreso en riesgo sí, y dispara una decisión. |
+| La recomendación se calcula como promotores menos detractores y se muestra con su margen de error. | Los dos errores más comunes son promediar las notas y sobreinterpretar muestras pequeñas. |
 
-## Phase 2 · Ingestion, cleaning and plan B
+## 2 · Datos y plan B
 
-| # | Decision | Why |
-|---|----------|-----|
-| 17 | Data source mode `auto` (default): try the public download, fall back to the seeded generator on **any** error; `real` and `synthetic` force one path. | Rule: a network failure must never stop the build. CI tests use `synthetic` for determinism; the site build uses `auto`. |
-| 18 | Provenance is written to `data/processed/manifest.json` and printed on the site. | A reader must always know whether a chart is real or synthetic data. |
-| 19 | **In the build session, both UCI downloads failed** (the sandbox proxy blocked `archive.ics.uci.edu`, HTTP 403), so the committed screenshots use plan B. GitHub Actions can reach UCI, so the published site may use the real files. | Honest reporting; the page texts are generated from the data, so they stay correct either way. |
-| 20 | Service tickets are **always synthetic** and generated with a **priority-queue simulation with daily capacity**, not with independent random durations. | No public ticket log has SLA targets and reopenings. A first version with independent durations produced no backlog at all - unrealistic. Queues with capacity produce backlog, ageing and SLA breaches the way service desks really do. |
-| 21 | AI4I plan B re-implements the **published generation rules** of AI4I. | AI4I is itself synthetic; reproducing its rules keeps the failure physics (tool wear × torque → overstrain) that the case relies on. |
-| 22 | AI4I records are mapped to 10 machines × 1,000 contiguous 4-hour runs. | AI4I has no machine id or timestamp. Contiguous blocks keep the tool-wear sequence intact; the assumption is stated on the page. |
-| 23 | Work orders, stock, forecast, deliveries and the NPS survey are simulated with **explicit, documented policies** (see `cases/*/README.md`). | The public data covers demand and process; the operational half is simulated transparently instead of being presented as observed. |
-| 24 | The forecast is an **8-week moving average** on purpose. | It is the most common baseline in practice, and its lag around the Q4 season produces the bias / stockout / excess pattern the case explains. |
-| 25 | Stockout rate counts the **active assortment** only (between a SKU's first and last demand). | The first simulation showed 18% stockouts, almost all of them SKUs not yet launched or already discontinued. The catalog definition, SQL and the hand example were updated together. |
-| 26 | Data quality is measured on the **landing** tables (before cleaning); cleaning rules are code (`clean*` functions). | Measuring after cleaning would always show 100%; the gap between landing and clean data is the DQ story. |
-| 27 | Processed tables are Parquet (`pyarrow`). | Keeps dtypes (timestamps, booleans) between pipeline and site without re-parsing. |
+| Decisión | Por qué |
+|---|---|
+| Cada fuente pública tiene un plan B: un generador con semilla fija y la misma estructura. | Si una descarga falla, el sitio se sigue publicando, y siempre con los mismos números. |
+| De dónde salió cada dato se registra en cada actualización y se muestra en cada página. | El lector siempre tiene que saber si un gráfico es real o simulado. |
+| Las órdenes de trabajo, el inventario, el pronóstico, las entregas y la encuesta se simulan con reglas explícitas. | Las fuentes públicas tienen la demanda y el proceso, pero no esa mitad operativa; se simula de forma transparente en vez de presentarla como observada. |
+| El pronóstico es, a propósito, un promedio de las últimas 8 semanas. | Es el método más común en la práctica y su atraso frente a la temporada es justamente la historia del caso 3. |
+| Los quiebres de stock solo cuentan los productos activos. | La primera versión mostraba 18 % de quiebres, casi todos de productos no lanzados o ya descontinuados. |
+| La calidad de los datos se mide sobre los datos tal como llegan, antes de limpiarlos. | Medir después de limpiar siempre daría 100 %. |
+| Las mesas de ayuda simuladas usan una cola con capacidad diaria. | Una primera versión con tiempos al azar no generaba pendientes; con capacidad limitada aparecen la acumulación y los incumplimientos, como en la realidad. |
 
-## Phase 3 · Site and cases 1-2
+## 3 · Presentación
 
-| # | Decision | Why |
-|---|----------|-----|
-| 28 | **MkDocs Material** instead of Quarto. | Pure Python (`pip install`), no extra toolchain in CI; Material gives navigation, admonitions and tables out of the box. |
-| 29 | Pages are **generated Markdown** (`src/kpistory/site`) with Plotly charts inlined as HTML; generated pages are not committed. | Every number in a title or sentence comes from the data at build time, so the text cannot drift from the charts, and it stays correct if the build uses the real UCI files instead of plan B. |
-| 30 | **plotly.js is served from the site itself** (copied from the Python package) and loaded in `<head>`. | No CDN dependency (the build sandbox could not reach CDNs either), and inline chart scripts need Plotly defined before they run. |
-| 31 | Chart titles are **conclusions computed from the data**; the subtitle says what is plotted. Long titles are wrapped automatically. | The style rule "title = conclusion" only survives data changes if the conclusion is computed, not typed. |
-| 32 | One highlight colour (blue `#2a78d6`) + context grey; orange/aqua only when a comparison needs a second/third series; status colours (`#0ca30c` / `#fab219` / `#d03b3b`) reserved for good/watch/act and always paired with ✓ / ! / ✕ and a word. | Colour-blind-safe order validated by the palette tool used to design it; status must never be colour alone. |
-| 33 | Bars start at zero, **except** the availability-by-machine chart, which says so in its subtitle and in a note. | All machines sit between 75% and 100%; the decision is the gap to a 97% target. Breaking the rule openly is better than hiding it (the anti-pattern gallery shows the dishonest version). |
-| 34 | SLA trend and similar line charts may zoom the y-axis, stating the start in the subtitle. | Lines encode change by slope, not length; zooming is legitimate if declared. |
-| 35 | Each low-availability machine is classified as **"fails too often" vs "too slow to repair"** by comparing its MTBF and MTTR gaps to the fleet medians. | A first draft labelled all low-availability machines as reliability problems; the scatter showed two of them were repair-time problems. The text is now computed per machine. |
-| 36 | Quadrant lines in the MTBF/MTTR scatter use **fleet medians, not targets**. | With an illustrative 150 h MTBF target every machine would sit in the same quadrant; medians answer "which machines are different?". |
-| 37 | Every chart has a "Show the data" table where the data is small enough. | Accessibility (a table view) and auditability for a reviewer. |
-| 38 | `make all` runs lint → tests → validate → data → story pages → dashboard → `mkdocs build --strict`; the Pages workflow runs exactly that with `SOURCE=auto` and caches `data/raw`. | One command reproduces everything, locally and in CI. |
+| Decisión | Por qué |
+|---|---|
+| El sitio se genera desde los datos y no se guardan las páginas generadas. | Cada número de un título o de una frase sale de los datos: el texto no puede contradecir al gráfico, y sigue siendo correcto con datos reales o simulados. |
+| Los títulos de los gráficos son conclusiones calculadas. | La regla «el título es la conclusión» solo sobrevive a un cambio de datos si la conclusión se calcula. Cuando la conclusión depende de los datos, la frase completa cambia, no solo el número. |
+| Un color para destacar (azul) y gris para el contexto; verde, amarillo y rojo solo para el semáforo, siempre con texto. | Paleta apta para daltonismo; el estado nunca depende solo del color. |
+| Las barras empiezan en cero, salvo la disponibilidad por máquina, que lo dice en su subtítulo. | Todas las máquinas están entre 75 % y 100 %; romper la regla abiertamente es mejor que esconderlo. |
+| Solo se usan periodos completos (meses, trimestres, semanas). | Un periodo a medias parece una caída que no existió. |
+| La segunda presentación es un tablero interactivo en la misma web. | Todo funciona en el navegador y se actualiza en la nube; las historias explican el porqué y el tablero sirve para el seguimiento semanal. |
+| Cada indicador tiene un único valor de referencia, que usan el caso, el catálogo y el tablero. | Un mismo indicador no puede mostrar dos números distintos en el sitio; una prueba lo comprueba. |
 
-## Phase 4 · Cases 3, 4 and 5
+## 4 · Español, lectura sencilla y datos reales
 
-| # | Decision | Why |
-|---|----------|-----|
-| 39 | Case KPIs use the **last 12 months** of the log; snapshot KPIs (cover, obsolescence, RFM) use the last date. | A year is the shortest window that contains one full gift season. |
-| 40 | Forecast evaluation keeps **complete weeks and complete months only**. | The log ends on a Friday in December; the partial month first showed a fake +80% over-forecast. |
-| 41 | The MAPE vs WAPE chart groups SKU-weeks **by the size of the actual week**, not by ABC class. | A first version grouped by ABC class and its title ("slow movers inflate MAPE") was contradicted by the bars: A-class SKUs had the highest MAPE because their small weeks are intermittent. The mechanism is the size of the week, so that is what the chart shows. |
-| 42 | Titles that make a causal-sounding claim are **conditional on the data** (e.g. stockouts vs under-forecast months: the title and the decision change if fewer than half of stockout days fall in under-forecast months). | A computed number inside a hard-coded claim can still lie; the claim itself has to be computed. |
-| 43 | OTIF failures are decomposed into **short / late / both**, with the owner of each. | Fill rate and OTIF disagree by design; the decomposition turns the gap into two action owners. |
-| 44 | Retention uses **complete quarters only**; the last partial quarter is dropped. | A quarter with three weeks of data looks like a churn crisis. |
-| 45 | The NPS composition is the site's **only part-to-whole chart: a 100% bar with exactly three parts**. NPS by segment is shown with 95% margins of error. | Within the "no pies with more than three parts" rule, and NPS without n and error bars invites over-reading. |
-| 46 | The NPS-segment relationship is **declared an assumption** on the page. | Scores were generated per segment, so presenting the link as a finding would be circular. |
-| 47 | The data-quality grid colours cells by **status against the catalog target**, never by raw value, and shows "not measurable" instead of a value where no load timestamp exists. | A 99.2% can be a problem (uniqueness) while 96% is fine elsewhere; and an invented 100% would hide a missing audit column. |
-
-## Phase 5 · Anti-pattern gallery
-
-| # | Decision | Why |
-|---|----------|-----|
-| 48 | Six pairs, each built from the **cases' own data**: truncated axis, mean vs median, too many series, pie vs bars, traffic light without target, dual axis. | The five requested plus the dual axis, the most common way to invent a correlation. Using the cases' data shows the honest version is the one actually used. |
-| 49 | Misleading charts use **library-default habits** (descriptive titles, rainbow colours, legends) rather than exaggerated strawmen. | The gallery is credible only if the left side looks like something people really publish. |
-| 50 | The traffic-light pair colours the misleading side **relative to the fleet average**. | It is the subtle and common version of "status without a target": half the fleet is red by construction. |
-| 51 | The "too many series" message is chosen by the data (the top-10 SKU whose demand dropped most) with a conditional title. | A first draft claimed a SKU was "seasonal" with 29% of its year in Q4 - barely above the 25% of a flat year. The claim was replaced by one the data supports. |
-| 52 | CI also runs `make all SOURCE=synthetic` on every push. | The site generator is code too; a broken page should fail the build, not the deploy. |
-
-## Phase 6 · Interactive KPI dashboard (second presentation layer)
-
-| # | Decision | Why |
-|---|----------|-----|
-| 53 | The second presentation layer is a **self-contained interactive HTML dashboard** (`kpistory dashboard` → `/dashboard/` on GitHub Pages), next to the story site. | Everything runs in the cloud and is viewable in any browser. The story site explains *why*; the dashboard is the weekly monitoring view of the same KPIs. |
-| 54 | Dashboard data is a JSON payload built by the **same engine** (headline values, trends, statuses) plus the catalog texts (question, target, how to read, misreadings, owner). | Nothing is computed twice: a card and its story page always show the same number. |
-| 55 | Layout: domain and status filters in one row, KPI cards (value, ✓ ! ✕ status with a word, target, sparkline), a detail panel with the trend against the target line or band. | Standard monitoring pattern: scan for red, click, understand. Status never relies on colour alone. |
-| 56 | Trends use complete periods only; breakdown views (by queue, SKU group, dataset, segment) are used where a KPI is a snapshot. | Same rule as the story pages - partial periods create fake drops. |
-| 57 | Filter state lives in the URL hash. | A filtered view can be shared as a link; no storage needed. |
-| 58 | Plotly is loaded from the site's own assets; no external CDN. | One self-hosted dependency for both layers. |
-| 59 | The dashboard uses the same palette module as the story site. | Two layers, one visual language. |
-
-## Phase 7 · README and release
-
-| # | Decision | Why |
-|---|----------|-----|
-| 60 | README screenshots are cropped elements of the real built site (Playwright, 2× scale), committed in `docs/img/`. | A recruiter skimming GitHub sees the work without opening the site; crops of real pages cannot drift into mock-ups. |
-| 61 | The README maps each requirement of the target job descriptions to a concrete file or page ("What this demonstrates"). | Five-minute review: claims are verifiable by clicking. |
-| 62 | "How this was built" and "Scope & limitations" are explicit about Claude Code, synthetic data and illustrative targets. | Honesty is part of the method being demonstrated. |
-| 63 | The repository and Pages URLs assume the name `kpi-catalog-storytelling` under `juansanchezalcantara20-ai`. | The build session had no repository attached; if the name differs, update `mkdocs.yml` (`repo_url`) and the README links. |
-
-## Phase 8 · Cloud-only development
-
-| # | Decision | Why |
-|---|----------|-----|
-| 64 | **All development and builds run in the cloud**: GitHub Actions for CI and publishing, GitHub Codespaces (`.devcontainer/`) for editing and previewing. | Requirement: no local setup. The devcontainer installs the package and runs `make all`, so a Codespace is ready to work in minutes. |
-| 65 | The Pages workflow publishes the story site and the dashboard together on every push to `main`. | One build, one URL, no local step. |
-| 66 | Real-data errors after a successful download fall back to plan B in `auto` mode, with the reason written to the manifest. | The first cloud build downloaded the real Online Retail II file and then failed writing it (numeric product descriptions); the site must still publish, and say why. Text columns are now normalised before writing. |
+| Decisión | Por qué |
+|---|---|
+| Todo lo que lee una persona está en español; los nombres internos del código quedan en inglés pero nunca se muestran sin su etiqueta. | El lector es un jefe de operaciones o un reclutador, no un programador. |
+| Cada caso empieza con un recuadro «En 30 segundos» y termina con un «Detalle técnico» cerrado. | Quien decide lee lo primero; quien revisa el cálculo abre lo último. Solo ahí aparecen nombres de columnas y fórmulas. |
+| Las prioridades se llaman Urgente, Alta, Media y Baja, con su plazo al lado; los trimestres se escriben «oct–dic 2024». | Los códigos internos no le dicen nada a un lector común. |
+| Una prueba automática revisa la legibilidad de cada página publicada. | Falla si encuentra palabras técnicas en inglés, siglas sin explicar o código fuera del detalle técnico. |
+| Se revisó la aparente contradicción del caso 1: tiempo típico de resolución en meta y pendientes antiguas en rojo. | No era un error: el primero mira solo las solicitudes cerradas y el segundo las que siguen abiertas al corte. La página lo explica con números y una prueba fija qué cuenta cada uno. |
+| Una prueba comprueba que ningún porcentaje quede fuera de 0 a 100 % y que el caso, el catálogo y el tablero muestren la misma cifra. | La coherencia de los números es parte del método, no un detalle. |
+| El caso 1 usa solicitudes ciudadanas reales de Nueva York (servicio 311) del Departamento de Transporte. | Es una fuente abierta, estable, sin clave y con fechas de apertura y cierre, tipo y canal. No se encontró una fuente peruana equivalente con fechas de cierre que se pueda descargar de forma estable sin registro. |
+| La prioridad y el plazo de cada tipo de reclamo son un supuesto propio, documentado en Fuentes de datos. | La ciudad no publica plazos por tipo de reclamo; presentarlo como regla oficial sería falso. |
+| Solo se descargan columnas sin datos personales, y un control falla la publicación si aparece algún dato personal. | Se publican cifras agregadas, nunca direcciones, nombres, teléfonos ni textos de ciudadanos. |
+| La descarga corre en GitHub Actions cada mes y cuando alguien la pide, y solo publica si pasan todas las pruebas. | El entorno de desarrollo no tiene internet; la nube sí, y una actualización que rompe una prueba no llega al sitio. |
+| Si la descarga trae menos filas de las esperadas, se considera fallida y se usa el plan B, avisándolo. | Una descarga incompleta mostraría números equivocados con apariencia de reales. |

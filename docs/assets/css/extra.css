@@ -70,3 +70,9 @@
 @media (max-width: 900px) {
   .md-typeset .pair { grid-template-columns: 1fr; }
 }
+.md-typeset .kpi-meaning { font-size: 0.68rem; color: var(--ink); line-height: 1.3; margin-top: 0.2rem; }
+.md-typeset .leyenda { font-size: 0.75rem; color: var(--ink-2); margin: 0.2rem 0 0.4rem; }
+.md-typeset details.tecnico { border-color: #c3c2b7; font-size: 0.72rem; }
+.md-typeset details.tecnico > summary { background: #f4f4f1; }
+.md-typeset details.tecnico > summary::before { background-color: #898781; }
+.md-typeset .admonition.abstract, .md-typeset details.abstract { font-size: 0.8rem; }

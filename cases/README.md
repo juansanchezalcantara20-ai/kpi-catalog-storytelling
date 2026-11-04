@@ -1,15 +1,14 @@
-# Cases
+# Casos
 
-Each case is told as a story on the website with the same structure:
-**context → question → KPI → finding → decision → how it keeps being measured.**
+Cada caso se cuenta en el sitio con la misma estructura: **en 30 segundos → pregunta → indicadores → lo que
+encontramos → qué decidimos → cómo lo seguimos midiendo → detalle técnico**.
 
-| # | Case | KPIs | Data | Plan B |
-|---|------|------|------|--------|
-| 1 | [Service operations & SLA](01_service/README.md) | first response, resolution time, SLA compliance, aged backlog, FCR, reopen rate | Synthetic ticket queue simulation | - (always synthetic) |
-| 2 | [Maintenance](02_maintenance/README.md) | MTBF, MTTR, availability, PM compliance, planned share | UCI AI4I 2020 + work-order generator | AI4I re-generated from its published rules |
-| 3 | [Inventory & demand](03_inventory/README.md) | fill rate, OTIF, turnover, days of cover, stockouts, obsolescence, MAPE, WAPE, bias | UCI Online Retail II demand + stock simulation | Synthetic transaction log with the same schema and defects |
-| 4 | [Customers](04_customers/README.md) | retention, repeat purchase, RFM revenue at risk, NPS | UCI Online Retail II + simulated survey | Same synthetic log as case 3 |
-| 5 | [Data quality as a KPI](05_data_quality/README.md) | completeness, uniqueness, validity, timeliness | The landing data of cases 1-4 | Follows the other cases |
+| # | Caso | Datos reales | Plan B (si la descarga falla) |
+|---|------|------|------|
+| 1 | [Atención de solicitudes](01_service/README.md) | NYC 311, Departamento de Transporte | mesa de ayuda simulada |
+| 2 | [Mantenimiento](02_maintenance/README.md) | AI4I 2020 (UCI) | AI4I regenerado con sus reglas publicadas |
+| 3 | [Inventario y demanda](03_inventory/README.md) | Online Retail II (UCI) | ventas simuladas con la misma estructura y defectos |
+| 4 | [Clientes](04_customers/README.md) | Online Retail II (UCI) | las mismas ventas simuladas |
+| 5 | [Calidad de los datos](05_data_quality/README.md) | los datos de los casos 1 a 4 | sigue a los otros casos |
 
-The provenance actually used by the last build is in `data/processed/manifest.json`
-and on the website's *Data sources* page.
+El origen usado en cada actualización queda en `data/processed/manifest.json` y en la página *Fuentes de datos*.

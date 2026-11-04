@@ -36,7 +36,9 @@ class KPI:
     name: str
     case: str
     question: str
+    meaning: str
     definition: str
+    calculation: str
     formula: str
     unit: str
     granularity: str
@@ -48,6 +50,8 @@ class KPI:
     input: dict[str, Any]
     how_to_read: str
     misreadings: list[str]
+    decision: str
+    balance: str
     related: list[str]
     chart: dict[str, str]
     sql: str | None = None

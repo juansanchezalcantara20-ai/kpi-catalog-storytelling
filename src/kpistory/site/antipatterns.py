@@ -1,4 +1,4 @@
-"""Anti-pattern gallery: the same data shown wrong and right, side by side."""
+"""Errores comunes al medir: el mismo dato mostrado mal y bien, lado a lado."""
 
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ import plotly.graph_objects as go
 
 from ..engine import Engine
 from ..viz import charts, theme
-from .common import pct
+from .common import n, pct
+from .current import mes
 
 W = 34  # title wrap width for half-width charts
 RAINBOW = [
@@ -30,67 +31,63 @@ def _pair(bad: go.Figure, good: go.Figure, height: int = 380) -> str:
             legend=dict(orientation="h", y=-0.18, yanchor="top", x=0, font=dict(size=10))
         )
     return (
-        '<div class="pair">\n'
-        f'<div class="bad"><p class="verdict">✕ Misleading</p>\n{charts.to_html(bad, height=height)}</div>\n'
-        f'<div class="good"><p class="verdict">✓ Honest</p>\n{charts.to_html(good, height=height)}</div>\n'
+        '<div class="pair" markdown="0">\n'
+        f'<div class="bad"><p class="verdict">🔴 Engaña</p>\n{charts.to_html(bad, height=height)}</div>\n'
+        f'<div class="good"><p class="verdict">🟢 Honesto</p>\n{charts.to_html(good, height=height)}</div>\n'
         "</div>\n\n"
     )
 
 
 def _plain_title(text: str) -> dict:
-    """The 'bad' charts get descriptive titles - itself one of the anti-patterns."""
+    """The misleading charts get descriptive titles - itself one of the errors."""
     return dict(text=f"<b>{text}</b>")
 
 
 def build(t: dict[str, pd.DataFrame], e: Engine) -> str:
     md = [
-        "# Anti-pattern gallery\n",
-        "The same data, shown wrong (left) and right (right). Every pair uses the data of the cases, so the "
-        "honest version is also the one used on the case pages. The misleading versions are not strawmen - "
-        "each one is a default setting or a habit seen in real reporting.\n",
+        "# Errores comunes al medir\n",
+        "El mismo dato, mostrado de una forma que engaña (izquierda) y de una forma honesta (derecha). Todos los pares usan "
+        "los datos de los casos, así que la versión honesta es la que se usa en las páginas de los casos. Las versiones que "
+        "engañan no son exageraciones: son configuraciones por defecto o costumbres que se ven en informes reales.\n",
     ]
 
-    # 1 ------------------------------------------------------------- truncated axis
+    # 1 ------------------------------------------------------------ eje que no empieza en cero
     tk = t["tickets"]
     rq = tk[
         (tk["status"] == "resolved")
         & (tk["resolved_at"] >= tk["resolved_at"].max() - pd.Timedelta(days=91))
     ]
     q = e.compute_by("sla_compliance", rq, "queue").sort_values("value")
-    good_q = q.iloc[1:]  # the three queues around target: the comparison where truncation bites
+    good_q = q.iloc[1:4] if len(q) > 3 else q
     lo = float(good_q["value"].min())
     bad = go.Figure(
         go.Bar(
             x=good_q["queue"],
-            y=good_q["value"],
-            marker_color=[theme.SECOND, theme.HIGHLIGHT, theme.THIRD],
+            y=good_q["value"] * 100,
+            marker_color=[theme.SECOND, theme.HIGHLIGHT, theme.THIRD][: len(good_q)],
         )
     )
-    bad.update_layout(title=_plain_title("SLA compliance by queue"), showlegend=False)
-    bad.update_yaxes(range=[lo - 0.01, 1.0], tickformat=".0%")
-    good = charts.bar(
-        good_q["queue"], good_q["value"], horizontal=False,
-        conclusion="",
-        subtitle="SLA compliance, last quarter; bars start at zero", text=[pct(x, 1) for x in good_q["value"]],
-    )  # fmt: skip
+    bad.update_layout(title=_plain_title("Cumplimiento del plazo por equipo"), showlegend=False)
+    bad.update_yaxes(range=[lo * 100 - 1, 100], ticksuffix=" %")
+    good = charts.bar(good_q["queue"], good_q["value"], conclusion="", subtitle="", horizontal=False, pct=True,
+                      text=[pct(x, 1) for x in good_q["value"]])  # fmt: skip
     good.update_traces(
-        textposition="inside", insidetextanchor="end", textfont=dict(color="#0b0b0b")
+        textposition="inside", insidetextanchor="end", textfont=dict(color=theme.INK)
     )
-    good.update_layout(title=theme.title(
-        f"All three are within {(good_q['value'].max() - lo) * 100:.0f} points of each other", "SLA compliance, last quarter - bars start at zero", W))  # fmt: skip
-    charts.add_target(good, e.catalog["sla_compliance"].target, "Target 90%")
-    good.update_yaxes(range=[0, 1.08])
-    md.append("## 1 · The axis that does not start at zero\n")
+    good.update_layout(title=theme.title(f"Los equipos están a menos de {(good_q['value'].max() - lo) * 100:.0f} puntos entre sí",
+                                         "Cumplimiento del plazo, último trimestre; las barras empiezan en cero", W))  # fmt: skip
+    charts.add_target(good, e.catalog["sla_compliance"].target, "Meta 90 %", pct=True)
+    good.update_yaxes(range=[0, 108])
+    md.append("## 1 · El eje que no empieza en cero\n")
     md.append(_pair(bad, good))
     md.append(
-        f"**Why the left one misleads.** Bar *length* encodes the value. Starting the axis at {pct(lo - 0.01)} "
-        "turns a difference of a few points into bars that look several times longer, and the rainbow colours "
-        "suggest the queues are different kinds of thing. **What the right one does:** zero baseline, one "
-        "colour, the target as a reference line, and a title that says what the reader should conclude. "
-        "(Lines and dots may zoom, because they encode position, not length - and should say so.)\n"
+        f"**Por qué engaña la izquierda.** El largo de la barra representa el valor. Empezar el eje en {pct(lo - 0.01)} convierte "
+        "una diferencia de pocos puntos en barras que parecen varias veces más largas, y los colores sugieren que los equipos "
+        "son cosas distintas. **Qué hace la derecha:** empieza en cero, usa un solo color, dibuja la meta y su título dice qué "
+        "concluir. (Las líneas sí pueden acercar el eje, porque muestran posición y no largo, pero deben decirlo.)\n"
     )
 
-    # 2 --------------------------------------------------------------- mean vs median
+    # 2 ------------------------------------------------------------ promedio frente a mediana
     wo = t["work_orders"]
     corr = wo[wo["wo_type"].eq("corrective")]
     modes = (
@@ -100,33 +97,32 @@ def build(t: dict[str, pd.DataFrame], e: Engine) -> str:
     )
     modes = modes[modes["count"] >= 10]
     bad = go.Figure(go.Bar(x=modes.index, y=modes["mean"], marker_color=theme.HIGHLIGHT))
-    bad.update_layout(title=_plain_title("Average repair time by failure mode (h)"))
+    bad.update_layout(title=_plain_title("Tiempo promedio de reparación por falla (h)"))
     good = go.Figure()
     for m in modes.index:
         good.add_trace(go.Box(y=corr.loc[corr["failure_label"].eq(m), "repair_hours"], name=m, marker_color=theme.CONTEXT_DARK,
                               line=dict(width=1.5), boxpoints="outliers", showlegend=False))  # fmt: skip
     worst = modes["mean"].idxmax()
     good.update_layout(title=theme.title(
-        f"Typical repairs take {modes['median'].min():.1f}-{modes['median'].max():.1f} h; the means are pulled up by a few waits for parts",
-        "Repair hours per corrective work order (box = middle 50%, line = median, dots = outliers)", W))  # fmt: skip
+        f"Una reparación típica dura entre {modes['median'].min():.1f} y {modes['median'].max():.1f} h; los promedios los inflan unas pocas esperas de repuestos",
+        "Horas por reparación (la caja es la mitad central, la línea la reparación típica y los puntos los casos extremos)", W))  # fmt: skip
     good.update_yaxes(
         type="log",
-        title_text="hours (log scale)",
+        title_text="horas (escala logarítmica)",
         tickvals=[1, 2, 5, 10, 20, 50],
         ticktext=["1", "2", "5", "10", "20", "50"],
     )
-    md.append("## 2 · The average that hides the tail\n")
+    md.append("## 2 · El promedio que esconde la cola larga\n")
     md.append(_pair(bad, good))
     md.append(
-        f"**Why the left one misleads.** Repair times are right-skewed: most repairs are short and a few wait "
-        f"days for spare parts. The mean of '{worst}' ({modes.loc[worst, 'mean']:.1f} h) describes almost no "
-        f"real repair - its median is {modes.loc[worst, 'median']:.1f} h. Ranking modes by the mean ranks them "
-        "by their outliers. **What the right one does:** shows the distribution, so the typical repair and "
-        "the tail are both visible - and points the decision at the tail (spare parts), not at the technicians. "
-        "MTTR stays a mean in the catalog for the availability identity, and is always shown next to the median.\n"
+        f"**Por qué engaña la izquierda.** Los tiempos de reparación son muy desparejos: casi todas las reparaciones son cortas "
+        f"y unas pocas esperan días por repuestos. El promedio de «{worst}» ({modes.loc[worst, 'mean']:.1f} h) no describe casi "
+        f"ninguna reparación real: la típica dura {modes.loc[worst, 'median']:.1f} h. Ordenar las fallas por su promedio es "
+        "ordenarlas por sus casos extremos. **Qué hace la derecha:** muestra toda la distribución, así se ve la reparación "
+        "típica y la cola larga, y la decisión apunta a la cola (repuestos), no a los técnicos.\n"
     )
 
-    # 3 ------------------------------------------------------------ too many series
+    # 3 ------------------------------------------------------------ demasiadas series
     fc = t["forecast"]
     top = fc.groupby("sku")["actual_units"].sum().nlargest(10).index
     w = (
@@ -147,7 +143,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine) -> str:
             )
         )
     bad.update_layout(
-        title=_plain_title("Weekly demand, top 10 SKUs"),
+        title=_plain_title("Demanda semanal, 10 productos principales"),
         showlegend=True,
         legend=dict(font=dict(size=9)),
     )
@@ -155,26 +151,24 @@ def build(t: dict[str, pd.DataFrame], e: Engine) -> str:
     for s in w.columns:
         if s != star:
             good.add_trace(go.Scatter(x=w.index, y=w[s], mode="lines", line=dict(color=theme.CONTEXT, width=1), showlegend=False,
-                                      hovertemplate=f"{s}: %{{y:,.0f}}<extra></extra>"))  # fmt: skip
+                                      hovertemplate=f"{s}: %{{y:.0f}}<extra></extra>"))  # fmt: skip
     good.add_trace(go.Scatter(x=w.index, y=w[star], mode="lines", line=dict(color=theme.HIGHLIGHT, width=2.5), showlegend=False,
-                              hovertemplate=f"{star}: %{{y:,.0f}}<extra></extra>"))  # fmt: skip
-    peak_week = w[star].idxmax()
-    charts.annotate(good, peak_week, float(w[star].max()), f"SKU {star}", ay=-30)
+                              hovertemplate=f"{star}: %{{y:.0f}}<extra></extra>"))  # fmt: skip
+    charts.annotate(good, w[star].idxmax(), float(w[star].max()), f"producto {star}", ay=-30)
     good.update_layout(title=theme.title(
-        (f"SKU {star}, a top-10 seller, stopped selling after {last_sale:%B %Y} - its stock is now at risk"
-         if stopped else f"SKU {star} lost {1 - ratio[star]:.0%} of its weekly demand in a year"),
-        "Weekly units, top 10 SKUs; the other nine in grey for context", W))  # fmt: skip
-    md.append("## 3 · Too many series\n")
+        (f"El producto {star}, uno de los 10 que más se venden, dejó de venderse después de {mes(last_sale)}: su inventario queda en riesgo"
+         if stopped else f"El producto {star} perdió {(1 - ratio[star]) * 100:.0f} % de su demanda semanal en un año"),
+        "Unidades por semana de los 10 productos principales; los otros nueve en gris como referencia", W))  # fmt: skip
+    md.append("## 3 · Demasiadas series\n")
     md.append(_pair(bad, good))
     md.append(
-        "**Why the left one misleads.** Ten colours exceed what anyone can match to a legend, several hues are "
-        "indistinguishable for colour-blind readers, and no line is more important than another - so the "
-        "chart has no message. **What the right one does:** one highlighted series carries the message, the "
-        "others stay as grey context, and the label sits on the line instead of in a legend. If every series "
-        "matters, use small multiples instead.\n"
+        "**Por qué engaña la izquierda.** Diez colores superan lo que cualquiera puede emparejar con una leyenda, varios son "
+        "iguales para personas con daltonismo y ninguna línea es más importante que otra: el gráfico no tiene mensaje. "
+        "**Qué hace la derecha:** una sola serie destacada lleva el mensaje, las demás quedan en gris como contexto y la "
+        "etiqueta va sobre la línea. Si todas importan, se usan gráficos pequeños separados.\n"
     )
 
-    # 4 --------------------------------------------------------------------- pie vs bars
+    # 4 ------------------------------------------------------------ torta frente a barras
     counts = corr["failure_label"].value_counts()
     bad = go.Figure(
         go.Pie(
@@ -185,110 +179,103 @@ def build(t: dict[str, pd.DataFrame], e: Engine) -> str:
             textinfo="label",
         )
     )
-    bad.update_layout(title=_plain_title("Failures by mode"), showlegend=False)
-    good = charts.bar(
-        counts.index, counts.values, conclusion="", subtitle="", highlight={counts.index[0]}, xformat=",.0f",
-        text=[f"{n} ({pct(n / counts.sum())})" for n in counts.values],
-    )  # fmt: skip
+    bad.update_layout(title=_plain_title("Fallas por tipo"), showlegend=False)
+    good = charts.bar(counts.index, counts.values, conclusion="", subtitle="", highlight={counts.index[0]}, decimals=0,
+                      text=[f"{n(c)} ({pct(c / counts.sum())})" for c in counts.values])  # fmt: skip
     good.update_layout(title=theme.title(
-        f"{counts.index[0]} leads with {pct(counts.iloc[0] / counts.sum())}; {counts.index[1].lower()} is a clear second",
-        "Corrective work orders by failure mode, sorted", W))  # fmt: skip
-    good.update_xaxes(range=[0, counts.max() * 1.4])
-    md.append("## 4 · The pie with too many slices\n")
+        f"«{counts.index[0]}» encabeza con {pct(counts.iloc[0] / counts.sum())}; «{counts.index[1].lower()}» es un segundo claro",
+        "Órdenes de reparación por tipo de falla, de mayor a menor", W))  # fmt: skip
+    good.update_xaxes(range=[0, counts.max() * 1.45])
+    md.append("## 4 · La torta con demasiadas porciones\n")
     md.append(_pair(bad, good))
     md.append(
-        f"**Why the left one misleads.** People compare angles and areas poorly; with {len(counts)} slices, "
-        "the ranking of the middle modes is guesswork and the small slices vanish. **What the right one does:** "
-        "sorted bars on a common baseline make the ranking and the gaps exact. A pie is acceptable only for two "
-        "or three parts of a whole (the NPS bar in case 4 is the only part-to-whole chart on this site).\n"
+        f"**Por qué engaña la izquierda.** Comparamos mal ángulos y áreas: con {len(counts)} porciones, el orden de las del medio "
+        "es adivinanza y las pequeñas desaparecen. **Qué hace la derecha:** barras ordenadas sobre la misma base muestran el "
+        "orden y las diferencias exactas. Una torta solo sirve para dos o tres partes de un total (la barra de recomendación "
+        "del caso 4 es el único gráfico de partes de un total del sitio).\n"
     )
 
-    # 5 ------------------------------------------------------------ traffic light without target
+    # 5 ------------------------------------------------------------ semáforo sin meta
     ap = t["asset_periods"]
     av = e.compute_by("availability", ap, "asset_id").set_index("asset_id")["value"].sort_index()
     fleet = float(av.mean())
     rel = ["red" if x < fleet else "green" for x in av]
-    bad = go.Figure(go.Scatter(x=list(av.index), y=[1] * len(av), mode="markers",
-                               marker=dict(size=20, color=[theme.STATUS[s] for s in rel])))  # fmt: skip
-    bad.update_layout(title=_plain_title("Machine status"))
+    bad = go.Figure(
+        go.Scatter(
+            x=list(av.index),
+            y=[1] * len(av),
+            mode="markers",
+            marker=dict(size=20, color=[theme.STATUS[s] for s in rel]),
+        )
+    )
+    bad.update_layout(title=_plain_title("Estado de las máquinas"))
     bad.update_yaxes(visible=False, range=[0.5, 1.5])
     bad.update_xaxes(showline=False, ticks="")
     target, amber = e.catalog["availability"].target, e.catalog["availability"].thresholds["amber"]
-    status = [e.status("availability", x) for x in av]
     order = av.sort_values().index
-    good = go.Figure(go.Bar(
-        y=list(order), x=av[order], orientation="h",
-        marker_color=[theme.STATUS[e.status("availability", av[m])] for m in order],
-        text=[f"{theme.STATUS_ICON[e.status('availability', av[m])]} {pct(av[m], 1)}" for m in order],
-        textposition="outside", cliponaxis=False))  # fmt: skip
+    status = [e.status("availability", av[m]) for m in order]
+    good = go.Figure(go.Bar(y=list(order), x=av[order] * 100, orientation="h", marker_color=[theme.STATUS[s] for s in status],
+                            text=[f"{theme.STATUS_ICON[s]} {pct(av[m], 1)}" for s, m in zip(status, order, strict=True)],
+                            textposition="outside", cliponaxis=False))  # fmt: skip
     good.add_vrect(
-        x0=amber, x1=target, fillcolor="rgba(250,178,25,0.12)", line_width=0, layer="below"
+        x0=amber * 100,
+        x1=target * 100,
+        fillcolor="rgba(250,178,25,0.12)",
+        line_width=0,
+        layer="below",
     )
-    charts.add_target(good, target, f"Target {pct(target)}", axis="x")
+    charts.add_target(good, target, f"Meta {pct(target)}", axis="x", pct=True)
     good.update_layout(title=theme.title(
-        f"{status.count('red')} machines need action, {status.count('amber')} are close, {status.count('green')} are on target",
-        f"Availability vs a {pct(target)} target; amber band {pct(amber)}-{pct(target)}; axis starts at 75%", W))  # fmt: skip
-    good.update_xaxes(range=[0.75, 1.03], tickformat=".0%")
+        f"{status.count('red')} máquinas para actuar, {status.count('amber')} para vigilar, {status.count('green')} en meta",
+        f"Disponibilidad frente a una meta de {pct(target)}; franja amarilla entre {pct(amber)} y {pct(target)}; el eje empieza en 75 %", W))  # fmt: skip
+    good.update_xaxes(range=[75, 103], ticksuffix=" %")
     good.update_yaxes(autorange="reversed")
-    md.append("## 5 · The traffic light without a target\n")
+    md.append("## 5 · El semáforo sin meta\n")
     md.append(_pair(bad, good, height=420))
     md.append(
-        f"**Why the left one misleads.** The colours compare each machine with the fleet average ({pct(fleet, 1)}), "
-        "so about half of the fleet is red *by construction*, even if every machine met the target - and "
-        "red/green dots carry no value, no target and no meaning for colour-blind readers. **What the right one "
-        "does:** the status comes from the catalog's target and thresholds, the value is printed, the target and "
-        "the amber band are drawn, and every colour travels with an icon (✓ ! ✕).\n"
+        f"**Por qué engaña la izquierda.** Los colores comparan cada máquina con el promedio de la flota ({pct(fleet, 1)}), así que "
+        "cerca de la mitad sale en rojo *por construcción*, aunque todas cumplieran la meta; y puntos rojos y verdes no dicen "
+        "valor, ni meta, ni sirven a personas con daltonismo. **Qué hace la derecha:** el semáforo sale de la meta del "
+        "catálogo, el valor está escrito, la meta y la franja de alerta están dibujadas y cada color va con su texto.\n"
     )
 
-    # 6 ---------------------------------------------------------------------- dual axis
+    # 6 ------------------------------------------------------------ dos ejes
     tkm = tk.groupby("created_month").size()
     slam = e.compute_by(
         "sla_compliance", tk[tk["status"] == "resolved"], "resolved_month"
     ).set_index("resolved_month")["value"]
     bad = go.Figure()
-    bad.add_trace(go.Bar(x=tkm.index, y=tkm.values, name="Tickets", marker_color=theme.CONTEXT))
+    bad.add_trace(go.Bar(x=tkm.index, y=tkm.values, name="Solicitudes", marker_color=theme.CONTEXT))
     bad.add_trace(
         go.Scatter(
             x=slam.index,
-            y=slam.values,
-            name="SLA %",
+            y=slam.values * 100,
+            name="Cumplimiento",
             yaxis="y2",
             line=dict(color=theme.SECOND, width=3),
         )
     )
-    bad.update_layout(
-        title=_plain_title("Tickets and SLA"),
-        yaxis2=dict(
-            overlaying="y",
-            side="right",
-            range=[slam.min() - 0.005, slam.max() + 0.005],
-            tickformat=".0%",
-            showgrid=False,
-        ),
-    )
-    fs = tk[tk["queue"].eq("Field Support")].groupby("created_month").size()
-    others = tk[~tk["queue"].eq("Field Support")].groupby("created_month").size()
+    bad.update_layout(title=_plain_title("Solicitudes y cumplimiento"),
+                      yaxis2=dict(overlaying="y", side="right", range=[slam.min() * 100 - 0.5, slam.max() * 100 + 0.5], ticksuffix=" %", showgrid=False))  # fmt: skip
+    worst_q = q.iloc[0]["queue"]
+    fs = tk[tk["queue"].eq(worst_q)].groupby("created_month").size()
+    others = tk[~tk["queue"].eq(worst_q)].groupby("created_month").size()
     idx_fs, idx_ot = fs / fs.iloc[:6].mean() * 100, others / others.iloc[:6].mean() * 100
-    good = charts.line(
-        idx_fs.index, idx_fs.values, conclusion="", subtitle="", name="Field Support", yformat=".0f",
-        context={"Other queues": (idx_ot.index, idx_ot.values)},
-    )  # fmt: skip
+    good = charts.line(idx_fs.index, idx_fs.values, conclusion="", subtitle="", name=worst_q, decimals=0,
+                       context={"Otros equipos": (idx_ot.index, idx_ot.values)})  # fmt: skip
     good.update_layout(title=theme.title(
-        f"Field Support demand is {idx_fs.iloc[-1]:.0f}% of its H1 level; the other queues stay near 100%",
-        "Tickets created per month, indexed to the Jan-Jun average = 100 (one axis)", W))  # fmt: skip
+        f"La demanda de «{worst_q}» llegó a {idx_fs.iloc[-1]:.0f} respecto a sus primeros seis meses (= 100); los demás equipos siguen cerca de 100",
+        "Solicitudes creadas por mes, en base 100 = promedio de los primeros seis meses (un solo eje)", W))  # fmt: skip
     good.update_yaxes(rangemode="tozero")
-    md.append("## 6 · Two y-axes on one chart\n")
+    md.append("## 6 · Dos ejes verticales en un mismo gráfico\n")
     md.append(_pair(bad, good))
     md.append(
-        "**Why the left one misleads.** The two scales are independent, so where the line crosses the bars is an "
-        "arbitrary choice of axis ranges - it invents a correlation (or hides one). Total volume also mixes the "
-        "queue that changed with three that did not. **What the right one does:** one axis, both series indexed "
-        "to the same base, and the comparison that explains the SLA drop (case 1) made explicit. Show the SLA "
-        "trend in its own chart next to it.\n"
+        "**Por qué engaña la izquierda.** Las dos escalas son independientes: dónde se cruza la línea con las barras depende de "
+        "cómo se eligieron los rangos, así que inventa una relación (o la esconde). Además, el total mezcla el equipo que "
+        "cambió con los que no. **Qué hace la derecha:** un solo eje, las dos series en la misma base y la comparación que "
+        "explica la caída del caso 1. El cumplimiento va en su propio gráfico al lado.\n"
     )
-
     md.append(
-        "---\n\nThe rules behind the honest versions are listed on the [method page](method.md); the case pages "
-        "apply them to every chart.\n"
+        "---\n\nLas reglas detrás de las versiones honestas están en [Cómo leer este sitio](como-leer.md).\n"
     )
     return "\n".join(md)

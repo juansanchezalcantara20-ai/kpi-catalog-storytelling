@@ -26,8 +26,8 @@ CONTEXT = "#c3c2b7"  # everything that is not the message
 CONTEXT_DARK = "#898781"
 
 STATUS = {"green": "#0ca30c", "amber": "#fab219", "red": "#d03b3b", "n/a": "#c3c2b7"}
-STATUS_ICON = {"green": "✓", "amber": "!", "red": "✕", "n/a": "–"}
-STATUS_TEXT = {"green": "On target", "amber": "Watch", "red": "Act", "n/a": "No data"}
+STATUS_ICON = {"green": "🟢", "amber": "🟡", "red": "🔴", "n/a": "⚪"}
+STATUS_TEXT = {"green": "En meta", "amber": "Vigilar", "red": "Actuar", "n/a": "Sin dato"}
 BAND_FILL = "rgba(12, 163, 12, 0.08)"  # green target band
 SEQUENTIAL = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
 ORDINAL = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"]
@@ -77,6 +77,7 @@ TEMPLATE = go.layout.Template(
         ),
         hoverlabel=dict(bgcolor="white", font=dict(family=FONT, color=INK)),
         bargap=0.3,
+        separators=". ",
     )
 )
 pio.templates["kpistory"] = TEMPLATE

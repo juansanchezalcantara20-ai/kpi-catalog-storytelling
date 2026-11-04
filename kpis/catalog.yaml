@@ -1,786 +1,1167 @@
-# KPI catalog: the single source of truth.
+# Catálogo de indicadores: la única fuente de verdad.
 #
-# Every KPI is defined here once. The Python engine (src/kpistory), the static site,
-# the SQL reference queries and the Power BI measures are all derived from this file.
-# Schema: kpis/catalog.schema.json  -  Validate with: kpistory validate
+# Cada indicador se define aquí una sola vez. El motor de cálculo (src/kpistory), el sitio
+# de historias, el tablero y las consultas SQL de referencia se derivan de este archivo.
+# Esquema: kpis/catalog.schema.json  -  Validar con: kpistory validate
 #
-# Conventions
-#   * Ratios are stored as fractions (0.92) and displayed as percentages (92.0%).
-#   * thresholds.green / thresholds.amber are the boundaries of the traffic light:
-#       higher_is_better -> green if value >= green, amber if value >= amber, else red
-#       lower_is_better  -> green if value <= green, amber if value <= amber, else red
-#       target_range     -> green if inside [green], amber if inside [amber], else red
-#   * sql may reference params as ${name}; they are substituted from `params`
-#     so a parameter (e.g. the 7-day backlog limit) is written only once.
-#   * Targets are illustrative: they are set for the synthetic / public data of this
-#     portfolio, not taken from any real organisation.
+# Convenciones (los nombres de campo y los ids quedan en inglés; los textos, en español)
+#   * Las proporciones se guardan como fracción (0.92) y se muestran como "92.0 %".
+#   * thresholds.green / thresholds.amber son los límites del semáforo:
+#       higher_is_better -> en meta si valor >= green, vigilar si >= amber, si no actuar
+#       lower_is_better  -> en meta si valor <= green, vigilar si <= amber, si no actuar
+#       target_range     -> en meta dentro de [green], vigilar dentro de [amber], si no actuar
+#   * sql puede usar parámetros como ${nombre}; se sustituyen desde `params`.
+#   * Las metas son ilustrativas: se fijaron para los datos públicos o simulados de este
+#     portafolio, no para ninguna organización real.
 
 version: 1
 cases:
   service:
-    title: Service operations & SLA
-    tables: [tickets]
+    title: Atención de solicitudes
+    tables:
+    - tickets
   maintenance:
-    title: Maintenance & asset reliability
-    tables: [work_orders, asset_periods]
+    title: Mantenimiento de equipos
+    tables:
+    - work_orders
+    - asset_periods
   inventory:
-    title: Inventory & demand
-    tables: [order_lines, inventory_daily, inventory_snapshot, forecast]
+    title: Inventario y demanda
+    tables:
+    - order_lines
+    - inventory_daily
+    - inventory_snapshot
+    - forecast
   customers:
-    title: Customers
-    tables: [sales, customer_rfm, survey]
+    title: Clientes
+    tables:
+    - sales
+    - customer_rfm
+    - survey
   data_quality:
-    title: Data quality as a KPI
-    tables: [dq_results]
-
+    title: Calidad de los datos
+    tables:
+    - dq_results
 kpis:
-  # ------------------------------------------------------------------ SERVICE
-  - id: first_response_time
-    name: First response time (median)
-    case: service
-    question: How long does a customer wait before a human acknowledges the ticket?
-    definition: >-
-      Median elapsed hours between ticket creation and the first agent response,
-      over tickets that have received a response.
-    formula: "median(first_response_at - created_at) [hours]"
-    unit: hours
-    granularity: Ticket; reported weekly by priority and queue.
-    direction: lower_is_better
-    target: 2.0
-    thresholds: {green: 2.0, amber: 4.0}
-    owner: Service Desk Lead
-    source: Ticketing system (synthetic generator)
-    input: {table: tickets, columns: [first_response_hours]}
-    how_to_read: >-
-      Half of the tickets got a first answer faster than this value. Read it per
-      priority: a good fleet median can hide P1 tickets waiting overnight.
-    misreadings:
-      - Using the mean - a handful of tickets answered after a weekend dominates it.
-      - Counting auto-replies as a first response makes the KPI look perfect and meaningless.
-      - Ignoring unanswered tickets - they are censored, not fast; track them as backlog.
-    related: [resolution_time, sla_compliance]
-    chart: {type: line, why: "Trend over weeks against the target line; the question is 'are we drifting?'."}
-    sql: |-
-      WITH x AS (
-        SELECT first_response_hours AS v,
-               ROW_NUMBER() OVER (ORDER BY first_response_hours) AS rn,
-               COUNT(*) OVER () AS n
-        FROM tickets WHERE first_response_hours IS NOT NULL)
-      SELECT AVG(v) FROM x WHERE rn IN ((n + 1) / 2, (n + 2) / 2)
-
-  - id: resolution_time
-    name: Resolution time (median)
-    case: service
-    question: How long does it take to solve a customer's problem end to end?
-    definition: Median elapsed hours from creation to resolution over resolved tickets.
-    formula: "median(resolved_at - created_at) for status = resolved [hours]"
-    unit: hours
-    granularity: Ticket; reported weekly by priority and queue.
-    direction: lower_is_better
-    target: 24.0
-    thresholds: {green: 24.0, amber: 36.0}
-    owner: Service Desk Manager
-    source: Ticketing system (synthetic generator)
-    input: {table: tickets, columns: [status, resolution_hours]}
-    how_to_read: >-
-      The typical end-to-end wait. Always pair it with the 90th percentile: the
-      customers who complain live in the tail, not at the median.
-    misreadings:
-      - The mean is pulled up by a few very old tickets; the median alone hides them - show both or the P90.
-      - Only resolved tickets are counted, so a growing backlog of hard tickets makes this KPI improve (survivorship).
-      - Calendar hours vs business hours must be stated; mixing them across teams breaks comparisons.
-    related: [first_response_time, sla_compliance, backlog_aged_share, reopen_rate]
-    chart: {type: histogram, why: "The distribution (with median and P90 marked) shows the long tail that a single number hides."}
-    sql: |-
-      WITH x AS (
-        SELECT resolution_hours AS v,
-               ROW_NUMBER() OVER (ORDER BY resolution_hours) AS rn,
-               COUNT(*) OVER () AS n
-        FROM tickets WHERE status = 'resolved')
-      SELECT AVG(v) FROM x WHERE rn IN ((n + 1) / 2, (n + 2) / 2)
-
-  - id: sla_compliance
-    name: SLA compliance
-    case: service
-    question: What share of tickets did we resolve within the time we promised?
-    definition: >-
-      Resolved tickets whose resolution time is within the SLA target of their
-      priority, divided by all resolved tickets.
-    formula: "count(resolution_hours <= sla_target_hours) / count(resolved)"
-    unit: percent
-    granularity: Ticket; reported weekly and monthly by priority and queue.
-    direction: higher_is_better
-    target: 0.90
-    thresholds: {green: 0.90, amber: 0.85}
-    owner: Service Desk Manager
-    source: Ticketing system (synthetic generator)
-    input: {table: tickets, columns: [status, resolution_hours, sla_target_hours]}
-    how_to_read: >-
-      The promise kept. A drop means customers felt it already; look at aged
-      backlog to see the drop coming two to three weeks earlier.
-    misreadings:
-      - A lagging indicator - it is measured at closure, so tickets breaching right now are not in it yet.
-      - Pausing the SLA clock ("waiting for customer") without auditing the pauses inflates compliance.
-      - An overall figure averages P1 and P4; a 95% fleet number can coexist with a broken P1 promise.
-    related: [resolution_time, backlog_aged_share]
-    chart: {type: bullet, why: "Value against target and amber band in one glance; per queue as small bullets."}
-    sql: |-
-      SELECT CAST(SUM(CASE WHEN resolution_hours <= sla_target_hours THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
-      FROM tickets WHERE status = 'resolved'
-
-  - id: backlog_aged_share
-    name: Aged backlog (> 7 days)
-    case: service
-    question: How much of the open work is already old enough to hurt the SLA?
-    definition: Share of open tickets whose age at the snapshot date exceeds the age limit.
-    formula: "count(open AND age_days > age_limit_days) / count(open)"
-    unit: percent
-    granularity: Snapshot of open tickets; taken daily or weekly per queue.
-    direction: lower_is_better
-    target: 0.10
-    thresholds: {green: 0.10, amber: 0.20}
-    params: {age_limit_days: 7}
-    owner: Queue Team Lead
-    source: Ticketing system (synthetic generator)
-    input: {table: tickets, columns: [status, age_days]}
-    how_to_read: >-
-      A leading indicator: tickets that are old today become SLA breaches when
-      they close. Rising aged share with a flat backlog size means work is being
-      cherry-picked (easy tickets first).
-    misreadings:
-      - Backlog size alone can stay flat while its age explodes; always look at age.
-      - A snapshot on Monday morning and one on Friday evening are not comparable; fix the snapshot moment.
-    related: [sla_compliance, resolution_time]
-    chart: {type: bar, why: "Stacked age buckets per queue show where the old work sits."}
-    sql: |-
-      SELECT CAST(SUM(CASE WHEN age_days > ${age_limit_days} THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
-      FROM tickets WHERE status = 'open'
-
-  - id: first_contact_resolution
-    name: First contact resolution (FCR)
-    case: service
-    question: How often do we solve the problem in a single interaction?
-    definition: >-
-      Resolved tickets that needed exactly one customer contact and were not
-      reopened, divided by all resolved tickets.
-    formula: "count(contacts = 1 AND NOT reopened) / count(resolved)"
-    unit: percent
-    granularity: Ticket; reported monthly by channel and queue.
-    direction: higher_is_better
-    target: 0.70
-    thresholds: {green: 0.70, amber: 0.60}
-    owner: Service Desk Manager
-    source: Ticketing system (synthetic generator)
-    input: {table: tickets, columns: [status, contacts, reopened]}
-    how_to_read: >-
-      Effort saved for the customer and the team. Compare by channel: chat and
-      phone usually differ structurally, so set targets per channel.
-    misreadings:
-      - Counting a ticket as FCR and then letting it reopen double-counts success; reopened tickets are excluded here.
-      - Pushing FCR by closing tickets prematurely shows up as a higher reopen rate - read them together.
-    related: [reopen_rate, resolution_time]
-    chart: {type: bar, why: "Comparison across channels, sorted, against the target line."}
-    sql: |-
-      SELECT CAST(SUM(CASE WHEN contacts = 1 AND reopened = 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
-      FROM tickets WHERE status = 'resolved'
-
-  - id: reopen_rate
-    name: Reopen rate
-    case: service
-    question: How often is a "resolved" ticket not really resolved?
-    definition: Resolved tickets that were reopened at least once, divided by resolved tickets.
-    formula: "count(reopened) / count(resolved)"
-    unit: percent
-    granularity: Ticket; reported monthly by queue and agent group.
-    direction: lower_is_better
-    target: 0.05
-    thresholds: {green: 0.05, amber: 0.08}
-    owner: Quality Lead (Service)
-    source: Ticketing system (synthetic generator)
-    input: {table: tickets, columns: [status, reopened]}
-    how_to_read: >-
-      The quality counterweight to every speed KPI. If resolution time improves
-      and reopen rate rises, speed was bought with quality.
-    misreadings:
-      - Reading it without a time window - reopenings arrive days later, so the last weeks always look better than they are.
-    related: [first_contact_resolution, resolution_time]
-    chart: {type: line, why: "Trend next to resolution time to expose a speed-vs-quality trade-off."}
-    sql: |-
-      SELECT CAST(SUM(CASE WHEN reopened = 1 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
-      FROM tickets WHERE status = 'resolved'
-
-  # -------------------------------------------------------------- MAINTENANCE
-  - id: mtbf
-    name: Mean time between failures (MTBF)
-    case: maintenance
-    question: How long does an asset run, on average, before it fails?
-    definition: Total operating hours divided by the number of failures in the same scope and period.
-    formula: "sum(operating_hours) / sum(failures)"
-    unit: hours
-    granularity: Asset x month; rolled up by asset class.
-    direction: higher_is_better
-    target: 150.0
-    thresholds: {green: 150.0, amber: 100.0}
-    owner: Reliability Engineer
-    source: Process data (UCI AI4I 2020) mapped to an asset fleet + work-order generator
-    input: {table: asset_periods, columns: [operating_hours, failures]}
-    how_to_read: >-
-      Higher means more reliable. Compute it as a ratio of sums over the period,
-      never as the average of monthly MTBFs (months with zero failures break that).
-    misreadings:
-      - Averaging per-asset MTBF values instead of sum(hours)/sum(failures) overweights rarely-used assets.
-      - Using calendar hours instead of operating hours rewards idle assets.
-      - With very few failures the value is volatile; report the failure count next to it.
-    related: [mttr, availability, planned_work_share]
-    chart: {type: bar, why: "Ranking assets: the lowest bars are the reliability backlog."}
-    sql: |-
-      SELECT CAST(SUM(operating_hours) AS REAL) / SUM(failures) FROM asset_periods
-
-  - id: mttr
-    name: Mean time to repair (MTTR)
-    case: maintenance
-    question: Once an asset fails, how long until it runs again?
-    definition: Mean repair hours (failure to return to service) over corrective work orders.
-    formula: "mean(repair_hours) for wo_type = corrective"
-    unit: hours
-    granularity: Corrective work order; reported monthly by asset and failure mode.
-    direction: lower_is_better
-    target: 4.0
-    thresholds: {green: 4.0, amber: 6.0}
-    owner: Maintenance Supervisor
-    source: Work-order generator (synthetic)
-    input: {table: work_orders, columns: [wo_type, repair_hours]}
-    how_to_read: >-
-      Kept as a mean so that availability = MTBF / (MTBF + MTTR) holds. Because
-      repair times are right-skewed, always look at the median and the longest
-      repairs: waiting for spare parts usually lives in the tail.
-    misreadings:
-      - Mean vs median - a few repairs waiting for parts can double the mean while the typical repair is unchanged.
-      - Repair time is not response time; mixing "time to arrive" and "time to fix" hides where the delay is.
-    related: [mtbf, availability]
-    chart: {type: boxplot, why: "Distribution per failure mode shows whether the mean is driven by a tail."}
-    sql: |-
-      SELECT AVG(repair_hours) FROM work_orders WHERE wo_type = 'corrective'
-
-  - id: availability
-    name: Availability
-    case: maintenance
-    question: Of the time the asset was supposed to run, how much could it actually run?
-    definition: >-
-      Scheduled hours minus unplanned downtime, divided by scheduled hours.
-      Planned stops (preventive maintenance) are excluded from the scheduled time.
-    formula: "(sum(scheduled_hours) - sum(unplanned_downtime_hours)) / sum(scheduled_hours)"
-    unit: percent
-    granularity: Asset x month.
-    direction: higher_is_better
-    target: 0.97
-    thresholds: {green: 0.97, amber: 0.95}
-    owner: Maintenance Manager
-    source: Process data (UCI AI4I 2020) + work-order generator
-    input: {table: asset_periods, columns: [scheduled_hours, unplanned_downtime_hours]}
-    how_to_read: >-
-      The outcome KPI that operations feels. Decompose it: low availability with
-      high MTBF is a repair-speed problem (MTTR); with low MTBF it is a reliability problem.
-    misreadings:
-      - Different definitions of scheduled time (24/7 vs shifts) make plants incomparable; state the denominator.
-      - Excluding "minor stops" under a few minutes can hide a large share of lost time.
-    related: [mtbf, mttr]
-    chart: {type: line, why: "Monthly trend against target; one line per asset class at most."}
-    sql: |-
-      SELECT CAST(SUM(scheduled_hours) - SUM(unplanned_downtime_hours) AS REAL) / SUM(scheduled_hours)
-      FROM asset_periods
-
-  - id: pm_compliance
-    name: Preventive maintenance compliance
-    case: maintenance
-    question: Are we doing the preventive work we planned, when we planned it?
-    definition: >-
-      Preventive work orders completed no later than due date + tolerance,
-      divided by preventive work orders due in the period.
-    formula: "count(preventive AND completed_at <= due_date + tolerance_days) / count(preventive due)"
-    unit: percent
-    granularity: Preventive work order; reported monthly by asset and crew.
-    direction: higher_is_better
-    target: 0.90
-    thresholds: {green: 0.90, amber: 0.80}
-    params: {tolerance_days: 3}
-    owner: Maintenance Planner
-    source: Work-order generator (synthetic)
-    input: {table: work_orders, columns: [wo_type, due_date, completed_at]}
-    how_to_read: >-
-      A leading indicator of reliability. Late or skipped PMs show up as failures
-      weeks later, so a drop here predicts a drop in MTBF.
-    misreadings:
-      - Counting a PM done three weeks late as "done" hides the risk window; the tolerance makes lateness explicit.
-      - Rescheduling the due date to the completion date makes compliance 100% by construction - audit date changes.
-    related: [planned_work_share, mtbf]
-    chart: {type: bar, why: "Per-asset comparison sorted ascending; the worst assets are the action list."}
-    sql: |-
-      SELECT CAST(SUM(CASE WHEN completed_at IS NOT NULL
-                            AND julianday(completed_at) <= julianday(due_date) + ${tolerance_days} THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
-      FROM work_orders WHERE wo_type = 'preventive'
-
-  - id: planned_work_share
-    name: Planned maintenance share
-    case: maintenance
-    question: How much of our maintenance effort is planned rather than reactive?
-    definition: Labour hours on planned work orders divided by all maintenance labour hours.
-    formula: "sum(labor_hours where planned) / sum(labor_hours)"
-    unit: percent
-    granularity: Work order; reported monthly by crew.
-    direction: higher_is_better
-    target: 0.80
-    thresholds: {green: 0.80, amber: 0.65}
-    owner: Maintenance Manager
-    source: Work-order generator (synthetic)
-    input: {table: work_orders, columns: [planned, labor_hours]}
-    how_to_read: >-
-      A maturity indicator: reactive work costs more and disrupts production.
-      It moves slowly; read it quarterly.
-    misreadings:
-      - Counting work orders instead of hours - many small planned inspections can hide a few huge breakdowns.
-      - Raising it by re-labelling emergency work as "planned" the same day; planned means scheduled ahead.
-    related: [pm_compliance, mtbf]
-    chart: {type: bar, why: "Stacked 100% bar per month (two parts only) or a line against target."}
-    sql: |-
-      SELECT CAST(SUM(CASE WHEN planned = 1 THEN labor_hours ELSE 0 END) AS REAL) / SUM(labor_hours)
-      FROM work_orders
-
-  # ---------------------------------------------------------------- INVENTORY
-  - id: fill_rate
-    name: Fill rate (units)
-    case: inventory
-    question: Of the units customers asked for, how many did we ship from stock?
-    definition: Units shipped divided by units ordered.
-    formula: "sum(qty_shipped) / sum(qty_ordered)"
-    unit: percent
-    granularity: Order line; reported weekly by SKU class.
-    direction: higher_is_better
-    target: 0.95
-    thresholds: {green: 0.95, amber: 0.90}
-    owner: Supply Planner
-    source: Order lines (demand from UCI Online Retail II) + synthetic stock simulation
-    input: {table: order_lines, columns: [qty_ordered, qty_shipped]}
-    how_to_read: >-
-      Volume-weighted service. Big SKUs dominate it, so a good fill rate can
-      coexist with many small SKUs out of stock - read it next to stockout rate.
-    misreadings:
-      - Unit fill rate, line fill rate and order fill rate are three different KPIs; name which one.
-      - Lost sales that were never ordered (customer saw "out of stock") are invisible here.
-    related: [otif, stockout_rate, days_of_cover]
-    chart: {type: line, why: "Weekly trend against target with the stockout episodes annotated."}
-    sql: |-
-      SELECT CAST(SUM(qty_shipped) AS REAL) / SUM(qty_ordered) FROM order_lines
-
-  - id: otif
-    name: On time in full (OTIF)
-    case: inventory
-    question: How many orders arrived complete and on the promised date?
-    definition: >-
-      Orders whose every line was delivered no later than the promised date and
-      with the full quantity, divided by all orders.
-    formula: "count(orders with all lines on time AND in full) / count(orders)"
-    unit: percent
-    granularity: Order; reported weekly.
-    direction: higher_is_better
-    target: 0.90
-    thresholds: {green: 0.90, amber: 0.80}
-    owner: Logistics Manager
-    source: Order lines (demand from UCI Online Retail II) + synthetic stock simulation
-    input: {table: order_lines, columns: [order_id, qty_ordered, qty_shipped, promised_date, delivered_date]}
-    how_to_read: >-
-      The customer's view: one missing line fails the whole order. Always split
-      the failures into "late" and "short" - they have different owners.
-    misreadings:
-      - OTIF is much stricter than fill rate on multi-line orders; comparing the two numbers directly misleads.
-      - Using the requested date for some customers and the confirmed date for others changes the KPI silently.
-    related: [fill_rate, stockout_rate]
-    chart: {type: bar, why: "Failure decomposition (late / short / both) as a sorted bar."}
-    sql: |-
-      SELECT CAST(SUM(ok) AS REAL) / COUNT(*) FROM (
-        SELECT order_id,
-               MIN(CASE WHEN qty_shipped >= qty_ordered AND delivered_date IS NOT NULL
-                         AND delivered_date <= promised_date THEN 1 ELSE 0 END) AS ok
-        FROM order_lines GROUP BY order_id)
-
-  - id: inventory_turnover
-    name: Inventory turnover
-    case: inventory
-    question: How many times a year does the stock we hold get sold?
-    definition: Annualised cost of goods sold divided by average inventory value.
-    formula: "(sum(cogs_value) * 365 / days) / mean_daily(sum(on_hand_value))"
-    unit: times_per_year
-    granularity: SKU x day; reported monthly by SKU class.
-    direction: higher_is_better
-    target: 8.0
-    thresholds: {green: 8.0, amber: 5.0}
-    owner: Inventory Controller
-    source: Synthetic stock simulation on public demand
-    input: {table: inventory_daily, columns: [date, on_hand_value, cogs_value]}
-    how_to_read: >-
-      Capital efficiency. Higher is better only up to the point where stockouts
-      start: read it together with fill rate.
-    misreadings:
-      - Using sales at price instead of cost in the numerator inflates turnover by the margin.
-      - Using year-end inventory instead of the average flatters companies that run down stock before closing.
-    related: [days_of_cover, obsolescence_share, fill_rate]
-    chart: {type: bar, why: "By SKU class (A/B/C) - the comparison that drives policy."}
-    sql: |-
-      SELECT (SUM(cogs_value) * 365.0 / COUNT(DISTINCT date))
-             / (SELECT AVG(v) FROM (SELECT SUM(on_hand_value) AS v FROM inventory_daily GROUP BY date))
-      FROM inventory_daily
-
-  - id: days_of_cover
-    name: Days of cover
-    case: inventory
-    question: If demand continues as usual, how many days will current stock last?
-    definition: On-hand units at the last date divided by average daily demand over the window.
-    formula: "on_hand_units(last date) / (sum(demand_units) / days)"
-    unit: days
-    granularity: SKU; snapshot at period end.
-    direction: target_range
-    target: 21.0
-    thresholds: {green: [14.0, 35.0], amber: [7.0, 60.0]}
-    owner: Supply Planner
-    source: Synthetic stock simulation on public demand
-    input: {table: inventory_daily, columns: [date, on_hand_units, demand_units]}
-    how_to_read: >-
-      Too low means stockout risk before the next replenishment; too high means
-      tied-up capital and obsolescence risk. That is why it has a band, not a
-      direction.
-    misreadings:
-      - Using trailing demand for a seasonal item right before its season understates the risk.
-      - A fleet-level number nets SKUs with zero cover against SKUs with a year of cover.
-    related: [inventory_turnover, stockout_rate, obsolescence_share]
-    chart: {type: histogram, why: "Distribution of SKUs by cover with the green band shaded - shows both tails."}
-    sql: |-
-      SELECT (SELECT SUM(on_hand_units) FROM inventory_daily WHERE date = (SELECT MAX(date) FROM inventory_daily))
-             / (SUM(demand_units) * 1.0 / COUNT(DISTINCT date))
-      FROM inventory_daily
-
-  - id: stockout_rate
-    name: Stockout rate (SKU-days)
-    case: inventory
-    question: How often is an item simply not available?
-    definition: >-
-      SKU-days of the active assortment with zero on-hand units at end of day,
-      divided by all active SKU-days. A SKU is active between its first and last demand.
-    formula: "count(active AND on_hand_units <= 0) / count(active sku_days)"
-    unit: percent
-    granularity: SKU x day; reported weekly by SKU class.
-    direction: lower_is_better
-    target: 0.03
-    thresholds: {green: 0.03, amber: 0.06}
-    owner: Supply Planner
-    source: Synthetic stock simulation on public demand
-    input: {table: inventory_daily, columns: [on_hand_units, active]}
-    how_to_read: >-
-      Unweighted by volume, so it shows breadth: many small SKUs out of stock
-      raise it even when fill rate stays high.
-    misreadings:
-      - End-of-day stock misses intraday stockouts; for fast movers it understates the problem.
-      - Including discontinued or not-yet-launched SKUs inflates it - this definition counts the active assortment only.
-    related: [fill_rate, days_of_cover]
-    chart: {type: heatmap, why: "SKU x week grid reveals clusters of stockouts in time."}
-    sql: |-
-      SELECT CAST(SUM(CASE WHEN on_hand_units <= 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
-      FROM inventory_daily WHERE active = 1
-
-  - id: obsolescence_share
-    name: Obsolete stock share
-    case: inventory
-    question: How much of our inventory value has stopped moving?
-    definition: Value of stock with no movement for more than the age limit divided by total stock value.
-    formula: "sum(on_hand_value where days_since_last_movement > age_limit_days) / sum(on_hand_value)"
-    unit: percent
-    granularity: SKU; snapshot at month end.
-    direction: lower_is_better
-    target: 0.05
-    thresholds: {green: 0.05, amber: 0.10}
-    params: {age_limit_days: 180}
-    owner: Inventory Controller
-    source: Synthetic stock simulation on public demand
-    input: {table: inventory_snapshot, columns: [on_hand_value, days_since_last_movement]}
-    how_to_read: >-
-      Capital at risk of write-off. It grows quietly after over-forecast seasons,
-      so read it with forecast bias.
-    misreadings:
-      - Counting a single unit sold as "movement" resets the clock on a pallet of dead stock; consider coverage too.
-    related: [forecast_bias, days_of_cover, inventory_turnover]
-    chart: {type: bar, why: "Value by age bucket (sorted) - shows how much sits beyond the limit."}
-    sql: |-
-      SELECT SUM(CASE WHEN days_since_last_movement > ${age_limit_days} THEN on_hand_value ELSE 0 END) / SUM(on_hand_value)
-      FROM inventory_snapshot
-
-  - id: mape
-    name: Forecast error (MAPE)
-    case: inventory
-    question: On average, by what percentage does each item's forecast miss?
-    definition: Mean of |actual - forecast| / actual over SKU-periods with actual > 0.
-    formula: "mean(|A - F| / A) for A > 0"
-    unit: percent
-    granularity: SKU x week.
-    direction: lower_is_better
-    target: 0.40
-    thresholds: {green: 0.40, amber: 0.60}
-    owner: Demand Planner
-    source: Demand (UCI Online Retail II) + baseline forecast computed in this repo
-    input: {table: forecast, columns: [actual_units, forecast_units]}
-    how_to_read: >-
-      Every SKU-week weighs the same, so slow movers dominate. Use it to judge
-      forecastability of the long tail, not overall planning quality.
-    misreadings:
-      - Undefined when actual = 0 (those rows are dropped here - say so) and explodes on tiny actuals.
-      - Asymmetric - over-forecasts can exceed 100% error while under-forecasts cap at 100%.
-      - Comparing MAPE across portfolios with different volume mix; use WAPE for that.
-    related: [wape, forecast_bias]
-    chart: {type: bar, why: "MAPE vs WAPE side by side per SKU class makes the volume effect visible."}
-    sql: |-
-      SELECT AVG(ABS(actual_units - forecast_units) * 1.0 / actual_units) FROM forecast WHERE actual_units > 0
-
-  - id: wape
-    name: Forecast error (WAPE)
-    case: inventory
-    question: Of all the units we sold, how many did the forecast get wrong?
-    definition: Sum of absolute errors divided by sum of actuals.
-    formula: "sum(|A - F|) / sum(A)"
-    unit: percent
-    granularity: SKU x week; rolled up by SKU class.
-    direction: lower_is_better
-    target: 0.30
-    thresholds: {green: 0.30, amber: 0.45}
-    owner: Demand Planner
-    source: Demand (UCI Online Retail II) + baseline forecast computed in this repo
-    input: {table: forecast, columns: [actual_units, forecast_units]}
-    how_to_read: >-
-      Volume-weighted: big SKUs dominate, which is what inventory and service
-      feel. The headline planning-accuracy KPI.
-    misreadings:
-      - Computed at a high aggregation level, errors cancel out (SKU A over, SKU B under); compute at SKU level, then sum.
-    related: [mape, forecast_bias]
-    chart: {type: line, why: "Weekly trend; seasonal peaks annotated."}
-    sql: |-
-      SELECT SUM(ABS(actual_units - forecast_units)) * 1.0 / SUM(actual_units) FROM forecast
-
-  - id: forecast_bias
-    name: Forecast bias
-    case: inventory
-    question: Do we systematically forecast too much or too little?
-    definition: (Sum of forecast - sum of actuals) / sum of actuals. Positive = over-forecast.
-    formula: "(sum(F) - sum(A)) / sum(A)"
-    unit: percent
-    granularity: SKU x week; rolled up by SKU class and month.
-    direction: target_range
-    target: 0.0
-    thresholds: {green: [-0.05, 0.05], amber: [-0.10, 0.10]}
-    owner: Demand Planner
-    source: Demand (UCI Online Retail II) + baseline forecast computed in this repo
-    input: {table: forecast, columns: [actual_units, forecast_units]}
-    how_to_read: >-
-      Error you can fix. Accuracy (WAPE) says how big the miss is; bias says in
-      which direction. Persistent positive bias builds excess and obsolete stock;
-      negative bias builds stockouts.
-    misreadings:
-      - A bias near zero can hide large errors that cancel out; never read it without WAPE.
-    related: [wape, obsolescence_share, stockout_rate]
-    chart: {type: bar, why: "Diverging bars by month around zero with the green band shaded."}
-    sql: |-
-      SELECT (SUM(forecast_units) - SUM(actual_units)) * 1.0 / SUM(actual_units) FROM forecast
-
-  # ---------------------------------------------------------------- CUSTOMERS
-  - id: retention_rate
-    name: Customer retention (quarter over quarter)
-    case: customers
-    question: Of the customers who bought last quarter, how many bought again this quarter?
-    definition: >-
-      Customers active in both the previous and the current period divided by
-      customers active in the previous period.
-    formula: "|active(t-1) ∩ active(t)| / |active(t-1)|"
-    unit: percent
-    granularity: Customer x quarter.
-    direction: higher_is_better
-    target: 0.50
-    thresholds: {green: 0.50, amber: 0.40}
-    params: {period: QUARTER}
-    owner: Customer Success / CRM Lead
-    source: Transactions (UCI Online Retail II)
-    input: {table: sales, columns: [customer_id, invoice_date]}
-    how_to_read: >-
-      The base of recurring revenue. Read it by acquisition cohort: a stable
-      overall rate can hide new cohorts churning faster.
-    misreadings:
-      - Period length changes the number completely (monthly < quarterly < yearly); always state the period.
-      - Anonymous transactions (no customer id) are excluded - if that share changes, retention moves for no business reason.
-    related: [repeat_purchase_rate, revenue_at_risk_share]
-    chart: {type: line, why: "Quarterly trend; a cohort heatmap is the deeper view."}
-
-  - id: repeat_purchase_rate
-    name: Repeat purchase rate
-    case: customers
-    question: What share of customers come back for a second order?
-    definition: Customers with two or more distinct invoices in the window divided by customers with at least one.
-    formula: "count(customers with invoices >= 2) / count(customers)"
-    unit: percent
-    granularity: Customer; window of 12 months.
-    direction: higher_is_better
-    target: 0.60
-    thresholds: {green: 0.60, amber: 0.50}
-    owner: CRM Lead
-    source: Transactions (UCI Online Retail II)
-    input: {table: sales, columns: [customer_id, invoice_id]}
-    how_to_read: >-
-      Is the first purchase turning into a relationship? Customers acquired at
-      the end of the window have had less time to repeat - compare like with like.
-    misreadings:
-      - Counting invoice lines instead of distinct invoices makes every multi-item basket a "repeat".
-    related: [retention_rate, revenue_at_risk_share]
-    chart: {type: bar, why: "By acquisition cohort, against the target line."}
-    sql: |-
-      SELECT CAST(SUM(CASE WHEN n >= 2 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
-      FROM (SELECT customer_id, COUNT(DISTINCT invoice_id) AS n FROM sales GROUP BY customer_id)
-
-  - id: revenue_at_risk_share
-    name: Revenue at risk (RFM "At risk")
-    case: customers
-    question: How much of our revenue comes from good customers who have stopped buying?
-    definition: >-
-      Revenue in the look-back window from customers in the RFM "At risk"
-      segment (high frequency/monetary score, low recency score) divided by total revenue.
-    formula: "sum(monetary where segment = 'At risk') / sum(monetary)"
-    unit: percent
-    granularity: Customer; recomputed monthly on a 12-month window.
-    direction: lower_is_better
-    target: 0.10
-    thresholds: {green: 0.10, amber: 0.20}
-    owner: CRM Lead
-    source: Transactions (UCI Online Retail II), RFM scoring in this repo
-    input: {table: customer_rfm, columns: [segment, monetary]}
-    how_to_read: >-
-      The size of the win-back opportunity. The segment list is the action list:
-      call the top customers by monetary value first.
-    misreadings:
-      - RFM scores are quintiles of this dataset - an "At risk" label is relative, not absolute.
-      - Recency depends on the snapshot date; recompute on a fixed calendar to keep it comparable.
-    related: [retention_rate, repeat_purchase_rate, nps]
-    chart: {type: bar, why: "Revenue by segment, sorted, with the At-risk bar highlighted."}
-    sql: |-
-      SELECT SUM(CASE WHEN segment = 'At risk' THEN monetary ELSE 0 END) / SUM(monetary) FROM customer_rfm
-
-  - id: nps
-    name: Net Promoter Score (simulated survey)
-    case: customers
-    question: Would our customers recommend us?
-    definition: >-
-      Percentage of promoters (score 9-10) minus percentage of detractors
-      (score 0-6) among respondents. Passives (7-8) count in the denominator only.
-    formula: "100 * (count(score >= 9) - count(score <= 6)) / count(responses)"
-    unit: score
-    granularity: Survey response; reported monthly with its sample size.
-    direction: higher_is_better
-    target: 30.0
-    thresholds: {green: 30.0, amber: 10.0}
-    owner: Customer Experience Lead
-    source: Simulated survey (synthetic generator)
-    input: {table: survey, columns: [score]}
-    how_to_read: >-
-      A range from -100 to +100, not a percentage and not an average. With small
-      samples the confidence interval is wide; show n next to it.
-    misreadings:
-      - Averaging the 0-10 scores (e.g. 7.8/10) is not NPS and hides polarisation.
-      - Averaging segment NPS values without weighting by respondents gives the wrong total.
-      - Treating a 3-point monthly change as real when the margin of error is +/- 8 points.
-    related: [revenue_at_risk_share, retention_rate]
-    chart: {type: bar, why: "Stacked 100% bar with the three groups (only three parts) plus the score as a label."}
-    sql: |-
-      SELECT 100.0 * (SUM(CASE WHEN score >= 9 THEN 1 ELSE 0 END) - SUM(CASE WHEN score <= 6 THEN 1 ELSE 0 END)) / COUNT(*)
-      FROM survey
-
-  # ------------------------------------------------------------- DATA QUALITY
-  - id: dq_completeness
-    name: Completeness
-    case: data_quality
-    question: Are the fields we need actually filled in?
-    definition: Non-null cells in the required columns divided by all required cells.
-    formula: "count(non-null required cells) / (rows * required columns)"
-    unit: percent
-    granularity: Dataset x load; required columns defined in kpis/dq_rules.yaml.
-    direction: higher_is_better
-    target: 0.99
-    thresholds: {green: 0.99, amber: 0.95}
-    owner: Data Steward
-    source: All datasets of this repository (rules in kpis/dq_rules.yaml)
-    input: {table: any, columns: []}
-    how_to_read: >-
-      Measured only on the columns a KPI depends on. A missing customer id is a
-      business problem the moment retention is computed without it.
-    misreadings:
-      - Measuring completeness over every column dilutes the critical ones; scope it to required fields.
-      - Placeholder values ("N/A", 0, "unknown") count as filled; pair completeness with validity.
-    related: [dq_validity, dq_uniqueness]
-    chart: {type: heatmap, why: "Dataset x dimension grid with thresholds - one glance for the data owner."}
-
-  - id: dq_uniqueness
-    name: Uniqueness
-    case: data_quality
-    question: Is each real-world record stored exactly once?
-    definition: Distinct business keys divided by rows.
-    formula: "count(distinct key) / count(rows)"
-    unit: percent
-    granularity: Dataset x load; key defined in kpis/dq_rules.yaml.
-    direction: higher_is_better
-    target: 1.0
-    thresholds: {green: 0.999, amber: 0.99}
-    owner: Data Steward
-    source: All datasets of this repository (rules in kpis/dq_rules.yaml)
-    input: {table: any, columns: []}
-    how_to_read: >-
-      Duplicates silently inflate counts: one duplicated ticket is one extra
-      "resolved" ticket in every service KPI.
-    misreadings:
-      - Exact-row duplicates are only part of it; the same entity under two keys needs fuzzy matching.
-    related: [dq_completeness]
-    chart: {type: heatmap, why: "Same grid as the other dimensions so they can be compared."}
-
-  - id: dq_validity
-    name: Validity
-    case: data_quality
-    question: Do the values respect the business rules?
-    definition: Rows passing every validity rule of the dataset divided by rows.
-    formula: "count(rows passing all rules) / count(rows)"
-    unit: percent
-    granularity: Dataset x load; rules defined in kpis/dq_rules.yaml.
-    direction: higher_is_better
-    target: 0.98
-    thresholds: {green: 0.98, amber: 0.95}
-    owner: Data Steward
-    source: All datasets of this repository (rules in kpis/dq_rules.yaml)
-    input: {table: any, columns: []}
-    how_to_read: >-
-      Rules encode business meaning (quantity > 0, resolved after created).
-      Each failing rule is a ticket for the source system owner.
-    misreadings:
-      - A row can fail several rules; report rows, not rule failures, or the percentage can go negative.
-    related: [dq_completeness]
-    chart: {type: bar, why: "Failures by rule, sorted - the fix list."}
-
-  - id: dq_timeliness
-    name: Timeliness
-    case: data_quality
-    question: Is the data available soon enough after the event to act on it?
-    definition: Records loaded within the allowed delay after the business event divided by records.
-    formula: "count(loaded_at - event_at <= max_delay_hours) / count(rows)"
-    unit: percent
-    granularity: Dataset x load; event and load columns defined in kpis/dq_rules.yaml.
-    direction: higher_is_better
-    target: 0.95
-    thresholds: {green: 0.95, amber: 0.90}
-    owner: Data Engineer
-    source: Datasets that carry a load timestamp (rules in kpis/dq_rules.yaml)
-    input: {table: any, columns: []}
-    how_to_read: >-
-      Late data makes leading indicators lag. Datasets without a load timestamp
-      cannot be measured - that absence is itself a finding.
-    misreadings:
-      - Freshness of the latest record is not timeliness of all records; late back-dated entries hide behind a fresh max date.
-    related: [dq_completeness]
-    chart: {type: heatmap, why: "Same grid as the other dimensions."}
+- id: first_response_time
+  name: Tiempo hasta la primera respuesta
+  case: service
+  question: ¿Cuánto espera un cliente hasta que una persona le responde?
+  meaning: Horas que pasan desde que llega la solicitud hasta la primera respuesta de una persona.
+  definition: Mediana de horas entre la creación de la solicitud y la primera respuesta de un agente, sobre las
+    solicitudes que ya recibieron respuesta.
+  calculation: 'Se ordenan las solicitudes respondidas por su tiempo de espera y se toma la del medio: la mitad
+    esperó menos y la otra mitad más.'
+  formula: median(first_response_at - created_at) [hours]
+  unit: hours
+  granularity: Una fila por solicitud; se revisa cada semana por prioridad y por equipo.
+  direction: lower_is_better
+  target: 2.0
+  thresholds:
+    green: 2.0
+    amber: 4.0
+  owner: Jefe de mesa de ayuda
+  source: Sistema de solicitudes
+  input:
+    table: tickets
+    columns:
+    - first_response_hours
+  how_to_read: 'La mitad de las solicitudes recibió respuesta antes de este tiempo. Conviene mirarlo por prioridad:
+    un buen valor general puede esconder urgencias que esperaron toda la noche.'
+  misreadings:
+  - 'Usar el promedio: unas pocas solicitudes respondidas después de un fin de semana lo disparan.'
+  - 'Contar las respuestas automáticas como primera respuesta: el indicador queda perfecto y sin sentido.'
+  - 'Olvidar las solicitudes sin respuesta: no son rápidas, siguen esperando; se ven en las pendientes.'
+  decision: Reforzar la recepción (turnos, reglas de asignación) cuando la espera inicial supera la meta.
+  balance: 'Se equilibra con «resuelto en el primer contacto»: responder rápido no sirve si la respuesta no resuelve.'
+  related:
+  - resolution_time
+  - sla_compliance
+  chart:
+    type: line
+    why: Una línea semanal contra la meta responde a la pregunta «¿nos estamos desviando?».
+  sql: |-
+    WITH x AS (
+      SELECT first_response_hours AS v,
+             ROW_NUMBER() OVER (ORDER BY first_response_hours) AS rn,
+             COUNT(*) OVER () AS n
+      FROM tickets WHERE first_response_hours IS NOT NULL)
+    SELECT AVG(v) FROM x WHERE rn IN ((n + 1) / 2, (n + 2) / 2)
+- id: resolution_time
+  name: Tiempo de resolución
+  case: service
+  question: ¿Cuánto tardamos en resolver el problema del cliente de principio a fin?
+  meaning: Horas desde que llega la solicitud hasta que queda resuelta; se usa el valor típico (la mediana).
+  definition: Mediana de horas desde la creación hasta la resolución, sobre las solicitudes ya resueltas.
+  calculation: Se toman las solicitudes cerradas, se ordenan por su duración y se toma la del medio.
+  formula: median(resolved_at - created_at) for status = resolved [hours]
+  unit: hours
+  granularity: Una fila por solicitud; se revisa cada semana por prioridad y por equipo.
+  direction: lower_is_better
+  target: 24.0
+  thresholds:
+    green: 24.0
+    amber: 36.0
+  owner: Jefe de mesa de ayuda
+  source: Sistema de solicitudes
+  input:
+    table: tickets
+    columns:
+    - status
+    - resolution_hours
+  how_to_read: 'Es la espera típica. Siempre va acompañado de la cola larga: «9 de cada 10 se cierran en menos de
+    X horas». Los clientes que reclaman están en esa cola, no en el centro.'
+  misreadings:
+  - El promedio se infla por unas pocas solicitudes muy antiguas; la mediana sola las esconde. Hay que mostrar las
+    dos o el «9 de cada 10».
+  - 'Solo cuenta las solicitudes ya cerradas: si se acumulan las difíciles sin cerrar, el indicador mejora aunque
+    el servicio empeore.'
+  - Hay que decir si son horas de reloj u horas hábiles; mezclarlas entre equipos impide comparar.
+  decision: 'Decidir dónde reforzar la capacidad: el equipo cuya cola larga crece es el primero en atenderse.'
+  balance: 'Se equilibra con la tasa de reapertura: cerrar rápido no vale si la solicitud vuelve.'
+  related:
+  - first_response_time
+  - sla_compliance
+  - backlog_aged_share
+  - reopen_rate
+  chart:
+    type: histogram
+    why: La distribución, con la mediana y el «9 de cada 10» marcados, muestra la cola larga que un solo número
+      esconde.
+  sql: |-
+    WITH x AS (
+      SELECT resolution_hours AS v,
+             ROW_NUMBER() OVER (ORDER BY resolution_hours) AS rn,
+             COUNT(*) OVER () AS n
+      FROM tickets WHERE status = 'resolved')
+    SELECT AVG(v) FROM x WHERE rn IN ((n + 1) / 2, (n + 2) / 2)
+- id: sla_compliance
+  name: Cumplimiento del plazo comprometido
+  case: service
+  question: ¿Qué parte de las solicitudes resolvimos dentro del plazo que prometimos?
+  meaning: De cada 100 solicitudes cerradas, cuántas se resolvieron dentro del plazo comprometido con el cliente
+    (SLA) según su urgencia.
+  definition: Solicitudes resueltas dentro del plazo de su prioridad, dividido entre todas las solicitudes resueltas.
+  calculation: Se cuentan las solicitudes cerradas a tiempo y se dividen entre todas las cerradas.
+  formula: count(resolution_hours <= sla_target_hours) / count(resolved)
+  unit: percent
+  granularity: Una fila por solicitud; se revisa cada semana y cada mes por prioridad y por equipo.
+  direction: higher_is_better
+  target: 0.9
+  thresholds:
+    green: 0.9
+    amber: 0.85
+  owner: Jefe de mesa de ayuda
+  source: Sistema de solicitudes
+  input:
+    table: tickets
+    columns:
+    - status
+    - resolution_hours
+    - sla_target_hours
+  how_to_read: Es la promesa cumplida. Cuando baja, el cliente ya lo sintió; las solicitudes pendientes antiguas
+    avisan de esa caída dos o tres semanas antes.
+  misreadings:
+  - 'Es un indicador atrasado: se mide al cerrar, así que las solicitudes que hoy están venciendo todavía no aparecen.'
+  - Pausar el reloj («esperando al cliente») sin auditar esas pausas infla el cumplimiento.
+  - 'Un número general mezcla urgencias y casos simples: un 95 % puede convivir con las urgencias fuera de plazo.'
+  decision: Activar un plan de recuperación en el equipo o la prioridad que baja de la meta.
+  balance: Se equilibra con las solicitudes pendientes antiguas, que anticipan su caída.
+  related:
+  - resolution_time
+  - backlog_aged_share
+  chart:
+    type: bullet
+    why: Valor contra meta y franja de alerta en un vistazo; por equipo, en barras.
+  sql: |-
+    SELECT CAST(SUM(CASE WHEN resolution_hours <= sla_target_hours THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+    FROM tickets WHERE status = 'resolved'
+- id: backlog_aged_share
+  name: Pendientes con más de 7 días
+  case: service
+  question: ¿Qué parte del trabajo pendiente ya es tan antiguo que pone en riesgo el plazo?
+  meaning: De las solicitudes que siguen abiertas al cierre, qué parte lleva más de 7 días esperando.
+  definition: Solicitudes abiertas a la fecha de corte con más días de antigüedad que el límite, dividido entre
+    todas las abiertas a esa fecha.
+  calculation: Se toma la foto de las solicitudes abiertas al cierre, se cuentan las que llevan más de 7 días y
+    se dividen entre todas las abiertas.
+  formula: count(open AND age_days > age_limit_days) / count(open)
+  unit: percent
+  granularity: Foto de las solicitudes abiertas; se toma cada día o cada semana por equipo.
+  direction: lower_is_better
+  target: 0.1
+  thresholds:
+    green: 0.1
+    amber: 0.2
+  params:
+    age_limit_days: 7
+  owner: Coordinador de equipo
+  source: Sistema de solicitudes
+  input:
+    table: tickets
+    columns:
+    - status
+    - age_days
+  how_to_read: 'Es un indicador adelantado: lo que hoy es antiguo será un incumplimiento cuando se cierre. Si las
+    pendientes antiguas crecen mientras el total se mantiene, el equipo está atendiendo primero lo fácil.'
+  misreadings:
+  - 'Mirar solo cuántas pendientes hay: el total puede quedarse igual mientras su antigüedad se dispara.'
+  - 'Comparar una foto del lunes temprano con una del viernes en la tarde: hay que fijar el momento de la foto.'
+  - 'Compararlo con el tiempo de resolución sin aclarar que miden grupos distintos: uno las abiertas y el otro las
+    cerradas.'
+  decision: Organizar una limpieza de pendientes antiguas antes de que se conviertan en incumplimientos.
+  balance: 'Se equilibra con el cumplimiento del plazo: uno avisa, el otro confirma.'
+  related:
+  - sla_compliance
+  - resolution_time
+  chart:
+    type: bar
+    why: Barras apiladas por antigüedad y equipo muestran dónde está el trabajo viejo.
+  sql: |-
+    SELECT CAST(SUM(CASE WHEN age_days > ${age_limit_days} THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+    FROM tickets WHERE status = 'open'
+- id: first_contact_resolution
+  name: Resuelto en el primer contacto
+  case: service
+  question: ¿Con qué frecuencia resolvemos el problema en una sola interacción?
+  meaning: De cada 100 solicitudes cerradas, cuántas se resolvieron en el primer contacto, sin volver a llamar y
+    sin reabrirse.
+  definition: Solicitudes resueltas con un solo contacto del cliente y sin reapertura, dividido entre todas las
+    resueltas.
+  calculation: Se cuentan las solicitudes cerradas con un único contacto y que no se reabrieron, y se dividen entre
+    todas las cerradas.
+  formula: count(contacts = 1 AND NOT reopened) / count(resolved)
+  unit: percent
+  granularity: Una fila por solicitud; se revisa cada mes por canal y por equipo.
+  direction: higher_is_better
+  target: 0.7
+  thresholds:
+    green: 0.7
+    amber: 0.6
+  owner: Jefe de mesa de ayuda
+  source: Sistema de solicitudes
+  input:
+    table: tickets
+    columns:
+    - status
+    - contacts
+    - reopened
+  how_to_read: 'Mide el esfuerzo que le ahorramos al cliente. Conviene compararlo por canal: teléfono y chat suelen
+    ser distintos por naturaleza.'
+  misreadings:
+  - 'Contar como resuelta en el primer contacto una solicitud que luego se reabre: aquí las reabiertas no cuentan.'
+  - Subirlo cerrando antes de tiempo se nota después en la tasa de reapertura; hay que leerlos juntos.
+  decision: Decidir en qué canal invertir en capacitación o en base de conocimiento.
+  balance: Se equilibra con la tasa de reapertura.
+  related:
+  - reopen_rate
+  - resolution_time
+  chart:
+    type: bar
+    why: Comparación entre canales, ordenada, contra la meta.
+  sql: |-
+    SELECT CAST(SUM(CASE WHEN contacts = 1 AND reopened = 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+    FROM tickets WHERE status = 'resolved'
+- id: reopen_rate
+  name: Tasa de reapertura
+  case: service
+  question: ¿Con qué frecuencia una solicitud «resuelta» en realidad no lo estaba?
+  meaning: De cada 100 solicitudes cerradas, cuántas tuvieron que reabrirse porque el problema seguía.
+  definition: Solicitudes resueltas que se reabrieron al menos una vez, dividido entre todas las resueltas.
+  calculation: Se cuentan las solicitudes reabiertas y se dividen entre todas las cerradas.
+  formula: count(reopened) / count(resolved)
+  unit: percent
+  granularity: Una fila por solicitud; se revisa cada mes por equipo.
+  direction: lower_is_better
+  target: 0.05
+  thresholds:
+    green: 0.05
+    amber: 0.08
+  owner: Responsable de calidad del servicio
+  source: Sistema de solicitudes
+  input:
+    table: tickets
+    columns:
+    - status
+    - reopened
+  how_to_read: 'Es el contrapeso de cualquier indicador de velocidad: si el tiempo de resolución mejora y las reaperturas
+    suben, la rapidez se compró con calidad.'
+  misreadings:
+  - 'Leerlo sin ventana de tiempo: las reaperturas llegan días después, así que las últimas semanas siempre parecen
+    mejores de lo que son.'
+  decision: Revisar la calidad del cierre en el equipo cuyas reaperturas suben.
+  balance: Se equilibra con el tiempo de resolución.
+  related:
+  - first_contact_resolution
+  - resolution_time
+  chart:
+    type: line
+    why: Tendencia junto al tiempo de resolución para ver si la rapidez se pagó con calidad.
+  sql: |-
+    SELECT CAST(SUM(CASE WHEN reopened = 1 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+    FROM tickets WHERE status = 'resolved'
+- id: mtbf
+  name: Tiempo medio entre fallas
+  case: maintenance
+  question: ¿Cuánto tiempo funciona un equipo, en promedio, antes de fallar?
+  meaning: Horas de operación que pasan, en promedio, entre una falla y la siguiente. Más alto es mejor.
+  definition: Horas totales de operación divididas entre el número de fallas en el mismo periodo y alcance.
+  calculation: Se suman las horas que operaron los equipos y se dividen entre las fallas que tuvieron.
+  formula: sum(operating_hours) / sum(failures)
+  unit: hours
+  granularity: Equipo × mes; se agrupa por tipo de equipo.
+  direction: higher_is_better
+  target: 150.0
+  thresholds:
+    green: 150.0
+    amber: 100.0
+  owner: Ingeniero de confiabilidad
+  source: Datos de proceso (AI4I 2020) asignados a una flota de máquinas + órdenes de trabajo simuladas
+  input:
+    table: asset_periods
+    columns:
+    - operating_hours
+    - failures
+  how_to_read: Más alto significa más confiable. Se calcula sumando horas y fallas del periodo, nunca promediando
+    los valores de cada mes (los meses sin fallas rompen ese promedio).
+  misreadings:
+  - Promediar el valor de cada equipo en vez de sumar horas y fallas sobrevalora a los equipos que casi no se usan.
+  - Usar horas de calendario en vez de horas de operación premia a los equipos parados.
+  - Con pocas fallas el valor salta mucho; hay que mostrar el número de fallas al lado.
+  decision: Elegir qué equipos necesitan un análisis de causa raíz.
+  balance: 'Se equilibra con el tiempo medio de reparación: juntos explican la disponibilidad.'
+  related:
+  - mttr
+  - availability
+  - planned_work_share
+  chart:
+    type: bar
+    why: 'Barras por equipo: los más bajos son la lista de trabajo de confiabilidad.'
+  sql: |-
+    SELECT CAST(SUM(operating_hours) AS REAL) / SUM(failures) FROM asset_periods
+- id: mttr
+  name: Tiempo medio de reparación
+  case: maintenance
+  question: Cuando un equipo falla, ¿cuánto tarda en volver a funcionar?
+  meaning: Horas promedio que dura una reparación, desde la falla hasta que el equipo vuelve a operar. Más bajo
+    es mejor.
+  definition: Promedio de horas de reparación de las órdenes de trabajo correctivas.
+  calculation: Se suman las horas de todas las reparaciones correctivas y se dividen entre el número de reparaciones.
+  formula: mean(repair_hours) for wo_type = corrective
+  unit: hours
+  granularity: Orden de trabajo correctiva; se revisa cada mes por equipo y tipo de falla.
+  direction: lower_is_better
+  target: 4.0
+  thresholds:
+    green: 4.0
+    amber: 6.0
+  owner: Supervisor de mantenimiento
+  source: Órdenes de trabajo (simuladas)
+  input:
+    table: work_orders
+    columns:
+    - wo_type
+    - repair_hours
+  how_to_read: 'Se mantiene como promedio para que se cumpla disponibilidad ≈ tiempo entre fallas ÷ (tiempo entre
+    fallas + tiempo de reparación). Como hay reparaciones muy largas, siempre se mira también la reparación típica
+    (mediana) y las más largas: la espera de repuestos suele vivir ahí.'
+  misreadings:
+  - 'Promedio frente a mediana: unas pocas reparaciones esperando repuestos pueden duplicar el promedio sin que
+    cambie la reparación típica.'
+  - Tiempo de reparación no es tiempo de llegada; mezclarlos esconde dónde está la demora.
+  decision: Decidir si el problema son los repuestos, las habilidades o el acceso al equipo.
+  balance: Se equilibra con el tiempo medio entre fallas.
+  related:
+  - mtbf
+  - availability
+  chart:
+    type: boxplot
+    why: La distribución de reparaciones muestra si el promedio lo arrastra una cola larga.
+  sql: |-
+    SELECT AVG(repair_hours) FROM work_orders WHERE wo_type = 'corrective'
+- id: availability
+  name: Disponibilidad
+  case: maintenance
+  question: Del tiempo en que el equipo debía funcionar, ¿cuánto pudo funcionar de verdad?
+  meaning: De cada 100 horas programadas para producir, cuántas el equipo estuvo funcionando (sin contar las paradas
+    planificadas).
+  definition: Horas programadas menos paradas no planificadas, divididas entre las horas programadas.
+  calculation: A las horas programadas se les restan las horas perdidas por fallas y el resultado se divide entre
+    las horas programadas.
+  formula: (sum(scheduled_hours) - sum(unplanned_downtime_hours)) / sum(scheduled_hours)
+  unit: percent
+  granularity: Equipo × mes.
+  direction: higher_is_better
+  target: 0.97
+  thresholds:
+    green: 0.97
+    amber: 0.95
+  owner: Jefe de mantenimiento
+  source: Datos de proceso (AI4I 2020) + órdenes de trabajo simuladas
+  input:
+    table: asset_periods
+    columns:
+    - scheduled_hours
+    - unplanned_downtime_hours
+  how_to_read: 'Es el resultado que siente operaciones. Se descompone en dos: si un equipo falla poco pero tarda
+    en repararse, el problema es la reparación; si falla mucho, es la confiabilidad.'
+  misreadings:
+  - Definir distinto el tiempo programado (24/7 frente a turnos) hace incomparables a dos plantas; hay que decir
+    cuál es el denominador.
+  - Excluir las paradas cortas de pocos minutos puede esconder buena parte del tiempo perdido.
+  decision: Priorizar qué equipos reciben atención primero y de qué tipo (confiabilidad o reparación).
+  balance: Se equilibra con el cumplimiento del preventivo, que la anticipa.
+  related:
+  - mtbf
+  - mttr
+  chart:
+    type: line
+    why: Tendencia mensual contra la meta.
+  sql: |-
+    SELECT CAST(SUM(scheduled_hours) - SUM(unplanned_downtime_hours) AS REAL) / SUM(scheduled_hours)
+    FROM asset_periods
+- id: pm_compliance
+  name: Cumplimiento del mantenimiento preventivo
+  case: maintenance
+  question: ¿Hacemos el mantenimiento preventivo que planificamos, cuando lo planificamos?
+  meaning: De cada 100 mantenimientos preventivos programados, cuántos se hicieron a tiempo (hasta 3 días después
+    de la fecha).
+  definition: Órdenes preventivas terminadas a más tardar en la fecha programada más la tolerancia, divididas entre
+    las preventivas programadas en el periodo.
+  calculation: Se cuentan los preventivos hechos dentro de la tolerancia y se dividen entre los programados.
+  formula: count(preventive AND completed_at <= due_date + tolerance_days) / count(preventive due)
+  unit: percent
+  granularity: Orden preventiva; se revisa cada mes por equipo y cuadrilla.
+  direction: higher_is_better
+  target: 0.9
+  thresholds:
+    green: 0.9
+    amber: 0.8
+  params:
+    tolerance_days: 3
+  owner: Planificador de mantenimiento
+  source: Órdenes de trabajo (simuladas)
+  input:
+    table: work_orders
+    columns:
+    - wo_type
+    - due_date
+    - completed_at
+  how_to_read: 'Es un indicador adelantado de la confiabilidad: los preventivos atrasados o saltados aparecen como
+    fallas semanas después.'
+  misreadings:
+  - Contar como «hecho» un preventivo hecho tres semanas tarde esconde el periodo de riesgo; la tolerancia hace
+    visible el atraso.
+  - Mover la fecha programada a la fecha en que se hizo deja el cumplimiento en 100 % por construcción; hay que
+    auditar los cambios de fecha.
+  decision: Reprogramar la semana de la cuadrilla que se atrasa.
+  balance: Se equilibra con la parte planificada del trabajo y con el tiempo entre fallas.
+  related:
+  - planned_work_share
+  - mtbf
+  chart:
+    type: bar
+    why: 'Barras por equipo de menor a mayor: los peores son la lista de acción.'
+  sql: |-
+    SELECT CAST(SUM(CASE WHEN completed_at IS NOT NULL
+                          AND julianday(completed_at) <= julianday(due_date) + ${tolerance_days} THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+    FROM work_orders WHERE wo_type = 'preventive'
+- id: planned_work_share
+  name: Trabajo de mantenimiento planificado
+  case: maintenance
+  question: ¿Qué parte del esfuerzo de mantenimiento es planificado y no una reacción a fallas?
+  meaning: De cada 100 horas de mantenimiento, cuántas fueron trabajo planificado y no reparaciones de emergencia.
+  definition: Horas de trabajo en órdenes planificadas divididas entre todas las horas de mantenimiento.
+  calculation: Se suman las horas de las órdenes planificadas y se dividen entre todas las horas de mantenimiento.
+  formula: sum(labor_hours where planned) / sum(labor_hours)
+  unit: percent
+  granularity: Orden de trabajo; se revisa cada mes por cuadrilla.
+  direction: higher_is_better
+  target: 0.8
+  thresholds:
+    green: 0.8
+    amber: 0.65
+  owner: Jefe de mantenimiento
+  source: Órdenes de trabajo (simuladas)
+  input:
+    table: work_orders
+    columns:
+    - planned
+    - labor_hours
+  how_to_read: 'Indica madurez: el trabajo reactivo cuesta más y detiene la producción. Se mueve despacio; se lee
+    cada trimestre.'
+  misreadings:
+  - 'Contar órdenes en vez de horas: muchas inspecciones pequeñas pueden esconder unas pocas averías enormes.'
+  - Subirlo llamando «planificado» a un trabajo de emergencia del mismo día; planificado significa programado con
+    anticipación.
+  decision: Decidir cuánto trabajo correctivo convertir en preventivo.
+  balance: Se equilibra con el cumplimiento del preventivo.
+  related:
+  - pm_compliance
+  - mtbf
+  chart:
+    type: bar
+    why: Barra de 100 % por mes con dos partes, o una línea contra la meta.
+  sql: |-
+    SELECT CAST(SUM(CASE WHEN planned = 1 THEN labor_hours ELSE 0 END) AS REAL) / SUM(labor_hours)
+    FROM work_orders
+- id: fill_rate
+  name: Unidades atendidas
+  case: inventory
+  question: De las unidades que pidieron los clientes, ¿cuántas despachamos?
+  meaning: De cada 100 unidades pedidas, cuántas se despacharon desde el inventario.
+  definition: Unidades despachadas divididas entre unidades pedidas.
+  calculation: Se suman las unidades despachadas y se dividen entre las unidades pedidas.
+  formula: sum(qty_shipped) / sum(qty_ordered)
+  unit: percent
+  granularity: Línea de pedido; se revisa cada semana por tipo de producto.
+  direction: higher_is_better
+  target: 0.95
+  thresholds:
+    green: 0.95
+    amber: 0.9
+  owner: Planificador de abastecimiento
+  source: Líneas de pedido (demanda de UCI Online Retail II) + simulación de inventario
+  input:
+    table: order_lines
+    columns:
+    - qty_ordered
+    - qty_shipped
+  how_to_read: 'Pesa por volumen: los productos grandes lo dominan, así que un buen valor puede convivir con muchos
+    productos pequeños agotados. Se lee junto a los quiebres de stock.'
+  misreadings:
+  - Unidades atendidas, líneas atendidas y pedidos atendidos son tres indicadores distintos; hay que decir cuál.
+  - Las ventas perdidas que nunca se pidieron (el cliente vio «agotado») no aparecen aquí.
+  decision: Ajustar el inventario de seguridad de los productos que más fallan.
+  balance: Se equilibra con «pedidos completos y a tiempo», que es más exigente.
+  related:
+  - otif
+  - stockout_rate
+  - days_of_cover
+  chart:
+    type: line
+    why: Tendencia semanal contra la meta con los quiebres marcados.
+  sql: |-
+    SELECT CAST(SUM(qty_shipped) AS REAL) / SUM(qty_ordered) FROM order_lines
+- id: otif
+  name: Pedidos completos y a tiempo
+  case: inventory
+  question: ¿Cuántos pedidos llegaron completos y en la fecha prometida?
+  meaning: De cada 100 pedidos, cuántos llegaron con todas sus líneas completas y a tiempo.
+  definition: Pedidos cuyas líneas se entregaron todas a más tardar en la fecha prometida y con la cantidad completa,
+    divididos entre todos los pedidos.
+  calculation: Un pedido cuenta como bien atendido solo si todas sus líneas llegaron completas y a tiempo; se cuentan
+    esos pedidos y se dividen entre todos.
+  formula: count(orders with all lines on time AND in full) / count(orders)
+  unit: percent
+  granularity: Pedido; se revisa cada semana.
+  direction: higher_is_better
+  target: 0.9
+  thresholds:
+    green: 0.9
+    amber: 0.8
+  owner: Jefe de logística
+  source: Líneas de pedido (demanda de UCI Online Retail II) + simulación de inventario
+  input:
+    table: order_lines
+    columns:
+    - order_id
+    - qty_ordered
+    - qty_shipped
+    - promised_date
+    - delivered_date
+  how_to_read: 'Es la mirada del cliente: una sola línea faltante arruina el pedido entero. Las fallas se separan
+    siempre en «incompleto» y «tarde», porque tienen responsables distintos.'
+  misreadings:
+  - Es mucho más exigente que las unidades atendidas en pedidos de varias líneas; compararlos directamente engaña.
+  - Usar la fecha pedida para unos clientes y la confirmada para otros cambia el indicador sin avisar.
+  decision: 'Separar las fallas por responsable: lo incompleto es de planificación, lo tardío de logística.'
+  balance: Se equilibra con las unidades atendidas.
+  related:
+  - fill_rate
+  - stockout_rate
+  chart:
+    type: bar
+    why: Barras con las fallas separadas en incompleto, tarde o ambas.
+  sql: |-
+    SELECT CAST(SUM(ok) AS REAL) / COUNT(*) FROM (
+      SELECT order_id,
+             MIN(CASE WHEN qty_shipped >= qty_ordered AND delivered_date IS NOT NULL
+                       AND delivered_date <= promised_date THEN 1 ELSE 0 END) AS ok
+      FROM order_lines GROUP BY order_id)
+- id: inventory_turnover
+  name: Rotación del inventario
+  case: inventory
+  question: ¿Cuántas veces al año vendemos el inventario que mantenemos?
+  meaning: Cuántas veces al año se vende (a costo) el valor promedio del inventario. Más alto significa menos capital
+    inmovilizado.
+  definition: Costo de lo vendido, llevado a un año, dividido entre el valor promedio del inventario.
+  calculation: Se suma el costo de lo vendido en el periodo, se lleva a un año y se divide entre el inventario promedio.
+  formula: (sum(cogs_value) * 365 / days) / mean_daily(sum(on_hand_value))
+  unit: times_per_year
+  granularity: Producto × día; se revisa cada mes por tipo de producto.
+  direction: higher_is_better
+  target: 8.0
+  thresholds:
+    green: 8.0
+    amber: 5.0
+  owner: Controlador de inventarios
+  source: Simulación de inventario sobre demanda pública
+  input:
+    table: inventory_daily
+    columns:
+    - date
+    - on_hand_value
+    - cogs_value
+  how_to_read: 'Mide la eficiencia del capital. Más alto es mejor solo hasta el punto en que empiezan los quiebres:
+    se lee junto a las unidades atendidas.'
+  misreadings:
+  - Usar ventas a precio en vez de a costo infla la rotación en el margen.
+  - Usar el inventario de cierre de año en vez del promedio favorece a quien baja el stock justo antes del cierre.
+  decision: Decidir dónde reducir inventario sin afectar el servicio.
+  balance: Se equilibra con las unidades atendidas y los días de cobertura.
+  related:
+  - days_of_cover
+  - obsolescence_share
+  - fill_rate
+  chart:
+    type: bar
+    why: Barras por tipo de producto, la comparación que define la política.
+  sql: |-
+    SELECT (SUM(cogs_value) * 365.0 / COUNT(DISTINCT date))
+           / (SELECT AVG(v) FROM (SELECT SUM(on_hand_value) AS v FROM inventory_daily GROUP BY date))
+    FROM inventory_daily
+- id: days_of_cover
+  name: Días de cobertura
+  case: inventory
+  question: Si la demanda sigue igual, ¿para cuántos días alcanza el inventario actual?
+  meaning: Días que duraría el inventario de hoy con la demanda diaria promedio. Debe quedar dentro de una franja.
+  definition: Unidades en inventario a la última fecha divididas entre la demanda diaria promedio del periodo.
+  calculation: Se toma el inventario del último día y se divide entre lo que se vende en un día promedio.
+  formula: on_hand_units(last date) / (sum(demand_units) / days)
+  unit: days
+  granularity: Producto; foto al cierre del periodo.
+  direction: target_range
+  target: 21.0
+  thresholds:
+    green:
+    - 14.0
+    - 35.0
+    amber:
+    - 7.0
+    - 60.0
+  owner: Planificador de abastecimiento
+  source: Simulación de inventario sobre demanda pública
+  input:
+    table: inventory_daily
+    columns:
+    - date
+    - on_hand_units
+    - demand_units
+  how_to_read: Muy bajo es riesgo de quiebre antes de la próxima reposición; muy alto es capital inmovilizado y
+    riesgo de obsolescencia. Por eso tiene franja y no dirección.
+  misreadings:
+  - Usar la demanda pasada de un producto de temporada justo antes de su temporada subestima el riesgo.
+  - Un número de toda la empresa compensa productos sin cobertura con productos con un año de cobertura.
+  decision: Acelerar pedidos de los productos por debajo de la franja y frenar compras de los que están por encima.
+  balance: Se equilibra con la rotación y los quiebres de stock.
+  related:
+  - inventory_turnover
+  - stockout_rate
+  - obsolescence_share
+  chart:
+    type: histogram
+    why: La distribución de productos por cobertura, con la franja sombreada, muestra los dos extremos.
+  sql: |-
+    SELECT (SELECT SUM(on_hand_units) FROM inventory_daily WHERE date = (SELECT MAX(date) FROM inventory_daily))
+           / (SUM(demand_units) * 1.0 / COUNT(DISTINCT date))
+    FROM inventory_daily
+- id: stockout_rate
+  name: Quiebres de stock
+  case: inventory
+  question: ¿Con qué frecuencia un producto simplemente no está disponible?
+  meaning: De cada 100 días-producto en que el producto está activo, en cuántos terminó el día sin inventario.
+  definition: Días-producto del surtido activo con inventario cero al cierre del día, divididos entre todos los
+    días-producto activos. Un producto está activo entre su primera y su última demanda.
+  calculation: Se cuentan los días en que cada producto activo terminó sin inventario y se dividen entre todos sus
+    días activos.
+  formula: count(active AND on_hand_units <= 0) / count(active sku_days)
+  unit: percent
+  granularity: Producto × día; se revisa cada semana por tipo de producto.
+  direction: lower_is_better
+  target: 0.03
+  thresholds:
+    green: 0.03
+    amber: 0.06
+  owner: Planificador de abastecimiento
+  source: Simulación de inventario sobre demanda pública
+  input:
+    table: inventory_daily
+    columns:
+    - on_hand_units
+    - active
+  how_to_read: 'No pesa por volumen, así que muestra la amplitud del problema: muchos productos pequeños agotados
+    lo suben aunque las unidades atendidas sigan altas.'
+  misreadings:
+  - El inventario al cierre del día no ve los quiebres durante el día; en productos de alta rotación se queda corto.
+  - Incluir productos descontinuados o aún no lanzados lo infla; aquí solo cuenta el surtido activo.
+  decision: Revisar el inventario de seguridad de los productos que más se agotan.
+  balance: Se equilibra con las unidades atendidas y los días de cobertura.
+  related:
+  - fill_rate
+  - days_of_cover
+  chart:
+    type: heatmap
+    why: 'Tendencia semanal: muestra cuándo se concentran los quiebres.'
+  sql: |-
+    SELECT CAST(SUM(CASE WHEN on_hand_units <= 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+    FROM inventory_daily WHERE active = 1
+- id: obsolescence_share
+  name: Inventario sin movimiento
+  case: inventory
+  question: ¿Qué parte del valor de nuestro inventario dejó de moverse?
+  meaning: Del valor total del inventario, qué parte está en productos que no se venden hace más de 180 días.
+  definition: Valor del inventario sin movimiento por más del límite de días, dividido entre el valor total del
+    inventario.
+  calculation: Se suma el valor de los productos sin ventas en más de 180 días y se divide entre el valor total
+    del inventario.
+  formula: sum(on_hand_value where days_since_last_movement > age_limit_days) / sum(on_hand_value)
+  unit: percent
+  granularity: Producto; foto al cierre de mes.
+  direction: lower_is_better
+  target: 0.05
+  thresholds:
+    green: 0.05
+    amber: 0.1
+  params:
+    age_limit_days: 180
+  owner: Controlador de inventarios
+  source: Simulación de inventario sobre demanda pública
+  input:
+    table: inventory_snapshot
+    columns:
+    - on_hand_value
+    - days_since_last_movement
+  how_to_read: Es capital en riesgo de pérdida. Crece en silencio después de temporadas pronosticadas de más, por
+    eso se lee junto al sesgo del pronóstico.
+  misreadings:
+  - Una sola unidad vendida «reinicia el reloj» de un pallet entero sin rotación; conviene mirar también la cobertura.
+  decision: Liquidar, agrupar o devolver los productos sin movimiento y dejar de comprarlos.
+  balance: Se equilibra con el sesgo del pronóstico.
+  related:
+  - forecast_bias
+  - days_of_cover
+  - inventory_turnover
+  chart:
+    type: bar
+    why: Valor por antigüedad desde la última venta, de menor a mayor.
+  sql: |-
+    SELECT SUM(CASE WHEN days_since_last_movement > ${age_limit_days} THEN on_hand_value ELSE 0 END) / SUM(on_hand_value)
+    FROM inventory_snapshot
+- id: mape
+  name: Error porcentual promedio del pronóstico
+  case: inventory
+  question: En promedio, ¿por qué porcentaje falla el pronóstico de cada producto?
+  meaning: Error del pronóstico en porcentaje, promediando cada producto-semana por igual. Lo dominan las semanas
+    de poca venta.
+  definition: Promedio de |real − pronóstico| ÷ real en los producto-semana con venta mayor que cero.
+  calculation: Para cada producto y semana se calcula el error como porcentaje de lo vendido y se promedian todos
+    esos porcentajes.
+  formula: mean(|A - F| / A) for A > 0
+  unit: percent
+  granularity: Producto × semana.
+  direction: lower_is_better
+  target: 0.4
+  thresholds:
+    green: 0.4
+    amber: 0.6
+  owner: Planificador de demanda
+  source: Demanda (UCI Online Retail II) + pronóstico base calculado en este proyecto
+  input:
+    table: forecast
+    columns:
+    - actual_units
+    - forecast_units
+  how_to_read: Cada producto-semana pesa igual, así que dominan los productos lentos. Sirve para juzgar qué tan
+    predecible es la cola larga, no la calidad general de la planificación.
+  misreadings:
+  - No existe cuando la venta es cero (esas filas se excluyen) y se dispara con ventas muy pequeñas.
+  - 'Es asimétrico: pronosticar de más puede pasar del 100 % de error; pronosticar de menos, no.'
+  - Comparar este error entre portafolios con distinta mezcla de volumen; para eso está el error ponderado.
+  decision: Decidir qué productos de la cola larga se planifican con reglas simples en vez de pronóstico.
+  balance: Se equilibra con el error ponderado por volumen.
+  related:
+  - wape
+  - forecast_bias
+  chart:
+    type: bar
+    why: El error por tamaño de la venta semanal muestra por qué difiere del error ponderado.
+  sql: |-
+    SELECT AVG(ABS(actual_units - forecast_units) * 1.0 / actual_units) FROM forecast WHERE actual_units > 0
+- id: wape
+  name: Error del pronóstico ponderado por volumen
+  case: inventory
+  question: De todas las unidades vendidas, ¿cuántas se equivocó el pronóstico?
+  meaning: De cada 100 unidades vendidas, cuántas estuvieron mal pronosticadas (de más o de menos).
+  definition: Suma de los errores absolutos dividida entre la suma de lo vendido.
+  calculation: Se suman las diferencias entre pronóstico y venta (sin signo) y se dividen entre el total vendido.
+  formula: sum(|A - F|) / sum(A)
+  unit: percent
+  granularity: Producto × semana; se agrupa por tipo de producto.
+  direction: lower_is_better
+  target: 0.3
+  thresholds:
+    green: 0.3
+    amber: 0.45
+  owner: Planificador de demanda
+  source: Demanda (UCI Online Retail II) + pronóstico base calculado en este proyecto
+  input:
+    table: forecast
+    columns:
+    - actual_units
+    - forecast_units
+  how_to_read: 'Pondera por volumen: dominan los productos grandes, que es lo que sienten el inventario y el servicio.
+    Es el indicador principal de precisión.'
+  misreadings:
+  - Calcularlo a nivel muy agregado hace que los errores se cancelen (un producto de más, otro de menos); se calcula
+    por producto y luego se suma.
+  decision: Elegir qué productos necesitan un mejor método de pronóstico.
+  balance: 'Se equilibra con el sesgo: uno dice cuánto falla, el otro hacia qué lado.'
+  related:
+  - mape
+  - forecast_bias
+  chart:
+    type: line
+    why: Tendencia mensual con los picos de temporada marcados.
+  sql: |-
+    SELECT SUM(ABS(actual_units - forecast_units)) * 1.0 / SUM(actual_units) FROM forecast
+- id: forecast_bias
+  name: Sesgo del pronóstico
+  case: inventory
+  question: ¿Pronosticamos sistemáticamente de más o de menos?
+  meaning: Cuánto se pasa (positivo) o se queda corto (negativo) el pronóstico frente a lo vendido. Lo ideal es
+    cerca de cero.
+  definition: (Suma del pronóstico − suma de lo vendido) ÷ suma de lo vendido. Positivo = pronóstico de más.
+  calculation: Se resta lo vendido de lo pronosticado y se divide entre lo vendido, conservando el signo.
+  formula: (sum(F) - sum(A)) / sum(A)
+  unit: percent
+  granularity: Producto × semana; se agrupa por tipo de producto y mes.
+  direction: target_range
+  target: 0.0
+  thresholds:
+    green:
+    - -0.05
+    - 0.05
+    amber:
+    - -0.1
+    - 0.1
+  owner: Planificador de demanda
+  source: Demanda (UCI Online Retail II) + pronóstico base calculado en este proyecto
+  input:
+    table: forecast
+    columns:
+    - actual_units
+    - forecast_units
+  how_to_read: Es el error que se puede corregir. La precisión dice qué tan grande es la falla; el sesgo dice hacia
+    qué lado. El sesgo positivo persistente acumula inventario sin movimiento; el negativo, quiebres.
+  misreadings:
+  - Un sesgo cercano a cero puede esconder errores grandes que se cancelan; nunca se lee sin el error ponderado.
+  decision: Corregir el método de pronóstico en los meses con sesgo fuera de la franja.
+  balance: Se equilibra con el error ponderado por volumen.
+  related:
+  - wape
+  - obsolescence_share
+  - stockout_rate
+  chart:
+    type: bar
+    why: Barras por mes alrededor de cero con la franja aceptable sombreada.
+  sql: |-
+    SELECT (SUM(forecast_units) - SUM(actual_units)) * 1.0 / SUM(actual_units) FROM forecast
+- id: retention_rate
+  name: Clientes que vuelven a comprar
+  case: customers
+  question: De los clientes que compraron el trimestre pasado, ¿cuántos volvieron a comprar este trimestre?
+  meaning: De cada 100 clientes que compraron en un trimestre, cuántos volvieron a comprar en el siguiente.
+  definition: Clientes activos en el trimestre anterior y en el actual, divididos entre los clientes activos en
+    el trimestre anterior.
+  calculation: Se cuentan los clientes del trimestre anterior que también compraron en el actual y se dividen entre
+    los del trimestre anterior.
+  formula: '|active(t-1) ∩ active(t)| / |active(t-1)|'
+  unit: percent
+  granularity: Cliente × trimestre.
+  direction: higher_is_better
+  target: 0.5
+  thresholds:
+    green: 0.5
+    amber: 0.4
+  params:
+    period: QUARTER
+  owner: Responsable de relación con clientes
+  source: Transacciones (UCI Online Retail II)
+  input:
+    table: sales
+    columns:
+    - customer_id
+    - invoice_date
+  how_to_read: 'Es la base de los ingresos recurrentes. Conviene verlo por año de primera compra: un valor estable
+    puede esconder que los clientes nuevos se van más rápido.'
+  misreadings:
+  - La duración del periodo cambia todo (mensual < trimestral < anual); siempre hay que decir el periodo.
+  - 'Las compras sin cliente identificado se excluyen: si esa parte cambia, el indicador se mueve sin razón de negocio.'
+  decision: Decidir si hay que invertir en retener clientes o en captar nuevos.
+  balance: Se equilibra con el ingreso en riesgo, que dice a quién llamar.
+  related:
+  - repeat_purchase_rate
+  - revenue_at_risk_share
+  chart:
+    type: line
+    why: Tendencia trimestral.
+- id: repeat_purchase_rate
+  name: Clientes con más de una compra
+  case: customers
+  question: ¿Qué parte de los clientes vuelve por una segunda compra?
+  meaning: De cada 100 clientes del último año, cuántos compraron dos veces o más.
+  definition: Clientes con dos o más facturas en la ventana de 12 meses, divididos entre los clientes con al menos
+    una.
+  calculation: Se cuentan los clientes con dos o más compras distintas y se dividen entre todos los clientes del
+    periodo.
+  formula: count(customers with invoices >= 2) / count(customers)
+  unit: percent
+  granularity: Cliente; ventana de 12 meses.
+  direction: higher_is_better
+  target: 0.6
+  thresholds:
+    green: 0.6
+    amber: 0.5
+  owner: Responsable de relación con clientes
+  source: Transacciones (UCI Online Retail II)
+  input:
+    table: sales
+    columns:
+    - customer_id
+    - invoice_id
+  how_to_read: '¿La primera compra se convierte en relación? Los clientes que llegaron al final de la ventana tuvieron
+    menos tiempo para repetir: hay que comparar grupos parecidos.'
+  misreadings:
+  - Contar líneas de factura en vez de facturas distintas convierte cada compra de varios productos en «repetida».
+  decision: Diseñar acciones para la segunda compra de los clientes nuevos.
+  balance: Se equilibra con los clientes que vuelven a comprar.
+  related:
+  - retention_rate
+  - revenue_at_risk_share
+  chart:
+    type: bar
+    why: Barras por año de primera compra, contra la meta.
+  sql: |-
+    SELECT CAST(SUM(CASE WHEN n >= 2 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+    FROM (SELECT customer_id, COUNT(DISTINCT invoice_id) AS n FROM sales GROUP BY customer_id)
+- id: revenue_at_risk_share
+  name: Ingreso en riesgo
+  case: customers
+  question: ¿Cuánto de nuestro ingreso viene de buenos clientes que dejaron de comprar?
+  meaning: Del ingreso del último año, qué parte vino de clientes buenos que ahora están inactivos («en riesgo»).
+  definition: Ingreso de los últimos 12 meses de los clientes del segmento «en riesgo» (compraban seguido y bastante,
+    pero hace tiempo que no compran), dividido entre el ingreso total.
+  calculation: Se clasifica a cada cliente por qué tan reciente, frecuente y grande es su compra; se suma el ingreso
+    de los «en riesgo» y se divide entre el total.
+  formula: sum(monetary where segment = 'En riesgo') / sum(monetary)
+  unit: percent
+  granularity: Cliente; se recalcula cada mes sobre 12 meses.
+  direction: lower_is_better
+  target: 0.1
+  thresholds:
+    green: 0.1
+    amber: 0.2
+  owner: Responsable de relación con clientes
+  source: Transacciones (UCI Online Retail II), segmentación calculada en este proyecto
+  input:
+    table: customer_rfm
+    columns:
+    - segment
+    - monetary
+  how_to_read: 'Es el tamaño de la oportunidad de recuperación. La lista de clientes del segmento es la lista de
+    acción: se llama primero a los que más compraban.'
+  misreadings:
+  - 'Los puntajes son relativos a estos datos (quintiles): «en riesgo» es una etiqueta relativa, no absoluta.'
+  - La recencia depende de la fecha de corte; hay que recalcular siempre en la misma fecha del calendario.
+  decision: Lanzar una campaña de recuperación con la lista ordenada por ingreso.
+  balance: Se equilibra con los clientes que vuelven a comprar.
+  related:
+  - retention_rate
+  - repeat_purchase_rate
+  - nps
+  chart:
+    type: bar
+    why: Ingreso por segmento, ordenado, con «en riesgo» destacado.
+  sql: |-
+    SELECT SUM(CASE WHEN segment = 'En riesgo' THEN monetary ELSE 0 END) / SUM(monetary) FROM customer_rfm
+- id: nps
+  name: Recomendación de clientes (encuesta simulada)
+  case: customers
+  question: ¿Nos recomendarían nuestros clientes?
+  meaning: Porcentaje de clientes que nos recomendarían (nota 9–10) menos el de los que hablarían mal (nota 0–6).
+    Va de −100 a +100.
+  definition: Porcentaje de promotores (nota 9–10) menos porcentaje de detractores (nota 0–6) entre quienes respondieron.
+    Los neutros (7–8) solo cuentan en el total.
+  calculation: Se calcula qué porcentaje dio 9 o 10, qué porcentaje dio 0 a 6, y se restan.
+  formula: 100 * (count(score >= 9) - count(score <= 6)) / count(responses)
+  unit: score
+  granularity: Respuesta de encuesta; se informa cada mes con su número de respuestas.
+  direction: higher_is_better
+  target: 30.0
+  thresholds:
+    green: 30.0
+    amber: 10.0
+  owner: Responsable de experiencia del cliente
+  source: Encuesta simulada
+  input:
+    table: survey
+    columns:
+    - score
+  how_to_read: 'Va de −100 a +100; no es un porcentaje ni un promedio. Con pocas respuestas el margen de error es
+    amplio: siempre se muestra cuántas respuestas hubo.'
+  misreadings:
+  - Promediar las notas de 0 a 10 (por ejemplo 7.8/10) no es este indicador y esconde la polarización.
+  - Promediar los valores de cada segmento sin ponderar por respuestas da un total equivocado.
+  - Tomar como real un cambio de 3 puntos cuando el margen de error es de ± 8 puntos.
+  decision: Llamar a los detractores en 48 horas y corregir la causa más repetida.
+  balance: Se equilibra con el ingreso en riesgo.
+  related:
+  - revenue_at_risk_share
+  - retention_rate
+  chart:
+    type: bar
+    why: Barra de 100 % con tres grupos (solo tres partes) y el resultado como etiqueta.
+  sql: |-
+    SELECT 100.0 * (SUM(CASE WHEN score >= 9 THEN 1 ELSE 0 END) - SUM(CASE WHEN score <= 6 THEN 1 ELSE 0 END)) / COUNT(*)
+    FROM survey
+- id: dq_completeness
+  name: Completitud de los datos
+  case: data_quality
+  question: ¿Están llenos los campos que necesitamos?
+  meaning: De cada 100 celdas obligatorias, cuántas tienen un valor.
+  definition: Celdas no vacías en las columnas obligatorias divididas entre todas las celdas obligatorias.
+  calculation: Se cuentan las celdas obligatorias con valor y se dividen entre todas las celdas obligatorias.
+  formula: count(non-null required cells) / (rows * required columns)
+  unit: percent
+  granularity: Conjunto de datos × carga; las columnas obligatorias se definen en las reglas de calidad.
+  direction: higher_is_better
+  target: 0.99
+  thresholds:
+    green: 0.99
+    amber: 0.95
+  owner: Responsable de los datos
+  source: Todos los conjuntos de datos del proyecto
+  input:
+    table: any
+    columns: []
+  how_to_read: Se mide solo en las columnas de las que depende un indicador. Un cliente sin identificar es un problema
+    de negocio en cuanto se calcula la retención sin él.
+  misreadings:
+  - Medirlo sobre todas las columnas diluye las importantes; se limita a los campos obligatorios.
+  - Los valores de relleno («N/A», 0, «desconocido») cuentan como llenos; hay que combinarlo con la validez.
+  decision: Hacer obligatorio el campo faltante en el sistema de origen.
+  balance: Se equilibra con la validez.
+  related:
+  - dq_validity
+  - dq_uniqueness
+  chart:
+    type: heatmap
+    why: Una cuadrícula conjunto de datos × dimensión, con semáforo, de un vistazo.
+- id: dq_uniqueness
+  name: Unicidad de los datos
+  case: data_quality
+  question: ¿Cada registro real está guardado una sola vez?
+  meaning: De cada 100 filas, cuántas corresponden a un registro distinto (sin duplicados).
+  definition: Claves de negocio distintas divididas entre el número de filas.
+  calculation: Se cuentan las claves distintas y se dividen entre todas las filas.
+  formula: count(distinct key) / count(rows)
+  unit: percent
+  granularity: Conjunto de datos × carga.
+  direction: higher_is_better
+  target: 1.0
+  thresholds:
+    green: 0.999
+    amber: 0.99
+  owner: Responsable de los datos
+  source: Todos los conjuntos de datos del proyecto
+  input:
+    table: any
+    columns: []
+  how_to_read: 'Los duplicados inflan los conteos en silencio: una solicitud duplicada es una solicitud «resuelta»
+    de más en todos los indicadores de atención.'
+  misreadings:
+  - Los duplicados exactos son solo una parte; la misma entidad con dos claves distintas necesita comparación aproximada.
+  decision: Eliminar duplicados al cargar los datos y corregir la integración que los genera.
+  balance: Se equilibra con la completitud.
+  related:
+  - dq_completeness
+  chart:
+    type: heatmap
+    why: La misma cuadrícula que las otras dimensiones, para compararlas.
+- id: dq_validity
+  name: Validez de los datos
+  case: data_quality
+  question: ¿Los valores respetan las reglas del negocio?
+  meaning: De cada 100 filas, cuántas cumplen todas las reglas (por ejemplo, cantidad mayor que cero).
+  definition: Filas que cumplen todas las reglas de validez del conjunto de datos divididas entre todas las filas.
+  calculation: Se revisa cada fila contra las reglas; se cuentan las que las cumplen todas y se dividen entre todas
+    las filas.
+  formula: count(rows passing all rules) / count(rows)
+  unit: percent
+  granularity: Conjunto de datos × carga.
+  direction: higher_is_better
+  target: 0.98
+  thresholds:
+    green: 0.98
+    amber: 0.95
+  owner: Responsable de los datos
+  source: Todos los conjuntos de datos del proyecto
+  input:
+    table: any
+    columns: []
+  how_to_read: Las reglas expresan el sentido del negocio (cantidad mayor que cero, cierre después de la apertura).
+    Cada regla incumplida es un pedido de corrección al dueño del sistema de origen.
+  misreadings:
+  - Una fila puede fallar varias reglas; se cuentan filas, no fallas, o el porcentaje puede salir negativo.
+  decision: Pedir la corrección de la regla más incumplida al dueño del sistema de origen.
+  balance: Se equilibra con la completitud.
+  related:
+  - dq_completeness
+  chart:
+    type: bar
+    why: 'Fallas por regla, de mayor a menor: la lista de correcciones.'
+- id: dq_timeliness
+  name: Oportunidad de los datos
+  case: data_quality
+  question: ¿Los datos llegan a tiempo para poder actuar?
+  meaning: De cada 100 registros, cuántos se cargaron en el sistema dentro de las 24 horas siguientes al hecho.
+  definition: Registros cargados dentro del plazo permitido después del hecho de negocio, divididos entre todos
+    los registros.
+  calculation: Se compara la hora del hecho con la hora de carga y se cuentan los registros que llegaron dentro
+    del plazo.
+  formula: count(loaded_at - event_at <= max_delay_hours) / count(rows)
+  unit: percent
+  granularity: Conjunto de datos × carga.
+  direction: higher_is_better
+  target: 0.95
+  thresholds:
+    green: 0.95
+    amber: 0.9
+  owner: Ingeniero de datos
+  source: Conjuntos de datos que registran la hora de carga
+  input:
+    table: any
+    columns: []
+  how_to_read: Los datos tardíos hacen que los indicadores adelantados lleguen tarde. Los conjuntos sin hora de
+    carga no se pueden medir, y eso ya es un hallazgo.
+  misreadings:
+  - 'Que el último registro sea reciente no significa que todos lleguen a tiempo: los registros tardíos se esconden
+    detrás de una fecha máxima reciente.'
+  decision: Digitalizar el registro en el origen donde los datos llegan tarde.
+  balance: Se equilibra con la completitud.
+  related:
+  - dq_completeness
+  chart:
+    type: heatmap
+    why: La misma cuadrícula que las otras dimensiones.

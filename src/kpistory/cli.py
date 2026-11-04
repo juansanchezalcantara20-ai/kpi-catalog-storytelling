@@ -40,6 +40,12 @@ def cmd_dashboard(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_privacy(_: argparse.Namespace) -> int:
+    from .privacidad import main as privacy
+
+    return privacy()
+
+
 def cmd_all(args: argparse.Namespace) -> int:
     for step in (cmd_validate, cmd_data, cmd_site, cmd_dashboard):
         code = step(args)
@@ -68,6 +74,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("dashboard", help="generate the interactive KPI dashboard").set_defaults(
         func=cmd_dashboard
     )
+    sub.add_parser(
+        "privacidad", help="privacy gate: fail if personal data could be published"
+    ).set_defaults(func=cmd_privacy)
     args = parser.parse_args(argv)
     return args.func(args)
 

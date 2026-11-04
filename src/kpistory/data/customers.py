@@ -16,12 +16,12 @@ from ..formulas.customers import rfm_table
 SEED = 404
 # Probability of (detractor 0-6, passive 7-8, promoter 9-10) by RFM segment.
 SCORE_MIX = {
-    "Champions": (0.08, 0.30, 0.62),
-    "Loyal": (0.14, 0.38, 0.48),
-    "New / promising": (0.18, 0.40, 0.42),
-    "Needs attention": (0.30, 0.40, 0.30),
-    "At risk": (0.46, 0.34, 0.20),
-    "Hibernating": (0.40, 0.38, 0.22),
+    "Campeones": (0.08, 0.30, 0.62),
+    "Leales": (0.14, 0.38, 0.48),
+    "Nuevos o prometedores": (0.18, 0.40, 0.42),
+    "Requieren atención": (0.30, 0.40, 0.30),
+    "En riesgo": (0.46, 0.34, 0.20),
+    "Dormidos": (0.40, 0.38, 0.22),
 }
 RESPONSE_RATE = 0.30
 

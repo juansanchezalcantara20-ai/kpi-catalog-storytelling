@@ -1,9 +1,11 @@
-"""Case 1 data: synthetic service-desk tickets (there is no good public ticket log).
+"""Case 1 plan B: synthetic service-desk tickets.
 
+Used only when the public NYC 311 download fails (see data/solicitudes311.py).
 Story baked into the generator (documented in cases/01_service/README.md):
-a product rollout raises Field Support demand by ~60% from September 2024 while
-staffing stays flat (capacity is ~30% above the normal load). Congestion lengthens resolution times, ages the backlog and
-pushes agents to close faster, which shows up as more reopenings.
+a product launch raises "Soporte en terreno" demand by ~60% from September 2024 while
+staffing stays flat (capacity is ~30% above the normal load). Congestion lengthens
+resolution times, ages the open work and pushes agents to close faster, which shows up
+as more reopenings. Category values are stored in Spanish because they are shown to readers.
 """
 
 from __future__ import annotations
@@ -15,19 +17,21 @@ SEED = 7
 START, END = pd.Timestamp("2024-01-01"), pd.Timestamp("2024-12-31")
 SNAPSHOT = pd.Timestamp("2024-12-31 23:59")
 
+SURGE_QUEUE = "Soporte en terreno"
 QUEUES = {  # base tickets per weekday, median service hours
-    "Billing": (9, 6.0),
-    "Technical": (12, 10.0),
-    "Field Support": (8, 14.0),
-    "Accounts": (6, 5.0),
+    "Facturación": (9, 6.0),
+    "Soporte técnico": (12, 10.0),
+    SURGE_QUEUE: (8, 14.0),
+    "Cuentas": (6, 5.0),
 }
-PRIORITIES = ["P1", "P2", "P3", "P4"]
+PRIORITIES = ["Urgente", "Alta", "Media", "Baja"]
+PRIORITY_RANK = {p: i for i, p in enumerate(PRIORITIES)}
 PRIORITY_P = [0.05, 0.17, 0.48, 0.30]
-SLA_HOURS = {"P1": 8.0, "P2": 24.0, "P3": 72.0, "P4": 120.0}
-PRIORITY_SPEED = {"P1": 0.2, "P2": 0.7, "P3": 1.0, "P4": 1.3}
-CHANNELS = ["email", "phone", "chat", "portal"]
+SLA_HOURS = {"Urgente": 8.0, "Alta": 24.0, "Media": 72.0, "Baja": 120.0}
+PRIORITY_SPEED = {"Urgente": 0.2, "Alta": 0.7, "Media": 1.0, "Baja": 1.3}
+CHANNELS = ["Correo", "Teléfono", "Chat", "Portal"]
 CHANNEL_P = [0.40, 0.25, 0.20, 0.15]
-FCR_P = {"email": 0.58, "phone": 0.74, "chat": 0.78, "portal": 0.62}
+FCR_P = {"Correo": 0.58, "Teléfono": 0.74, "Chat": 0.78, "Portal": 0.62}
 ROLLOUT = pd.Timestamp("2024-09-01")
 
 
@@ -45,7 +49,7 @@ def generate(seed: int = SEED) -> pd.DataFrame:
         pending: list[dict] = []
         for day in days:
             weekend = day.day_of_week >= 5
-            surge = queue == "Field Support" and day >= ROLLOUT
+            surge = queue == SURGE_QUEUE and day >= ROLLOUT
             lam = base * (0.3 if weekend else 1.0) * (1.6 if surge else 1.0)
             for created in sorted(
                 day + pd.to_timedelta(rng.uniform(7, 19, rng.poisson(lam)), unit="h")
@@ -66,7 +70,7 @@ def generate(seed: int = SEED) -> pd.DataFrame:
                     }
                 )
             capacity = rng.poisson(base * 1.3 * (0.3 if weekend else 1.0))
-            pending.sort(key=lambda t: (t["priority"], t["created_at"]))
+            pending.sort(key=lambda t: (PRIORITY_RANK[t["priority"]], t["created_at"]))
             picked, pending = pending[:capacity], pending[capacity:]
             for t in picked:
                 if t["created_at"] >= day:  # picked up the day it arrived
@@ -118,15 +122,15 @@ def _inject_quality_issues(df: pd.DataFrame, rng: np.random.Generator) -> pd.Dat
     return pd.concat([df, dupes]).sort_values("created_at", ignore_index=True)
 
 
-def clean(landing: pd.DataFrame) -> pd.DataFrame:
+def clean(landing: pd.DataFrame, snapshot: pd.Timestamp = SNAPSHOT) -> pd.DataFrame:
     """Analysis-ready tickets: de-duplicated, impossible timestamps removed, derived columns added."""
     from ..formulas.service import derive_ticket_columns
 
     df = landing.drop_duplicates(subset="ticket_id").copy()
     bad = df["resolved_at"].notna() & (df["resolved_at"] < df["created_at"])
     df = df[~bad]
-    df["channel"] = df["channel"].fillna("unknown")
-    df = derive_ticket_columns(df, SNAPSHOT)
+    df["channel"] = df["channel"].fillna("Sin dato")
+    df = derive_ticket_columns(df, snapshot)
     df["created_week"] = df["created_at"].dt.to_period("W-SUN").dt.start_time
     df["created_month"] = df["created_at"].dt.to_period("M").dt.start_time
     df["resolved_month"] = df["resolved_at"].dt.to_period("M").dt.start_time

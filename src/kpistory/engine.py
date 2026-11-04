@@ -15,7 +15,7 @@ from . import catalog as catalog_mod
 from .catalog import KPI, Catalog
 from .formulas import REGISTRY
 
-STATUS_LABEL = {"green": "On target", "amber": "Watch", "red": "Act", "n/a": "No data"}
+STATUS_LABEL = {"green": "En meta", "amber": "Vigilar", "red": "Actuar", "n/a": "Sin dato"}
 
 
 class Engine:
@@ -72,28 +72,43 @@ def grade(k: KPI, value: float) -> str:
     return "green" if in_green else "amber" if in_amber else "red"
 
 
+UNIT_SUFFIX = {"hours": " h", "days": " días", "times_per_year": " veces al año", "score": ""}
+
+
+def number(value: float, decimals: int = 0) -> str:
+    """Spanish-style number for this site: decimal point, space as thousands separator."""
+    return f"{value:,.{decimals}f}".replace(",", " ")
+
+
+def pct(value: float, decimals: int = 1) -> str:
+    """0.892 -> '89.2 %' (space before %)."""
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return "sin dato"
+    return f"{number(value * 100, decimals)} %"
+
+
 def format_value(k: KPI, value: float, decimals: int | None = None) -> str:
     if value is None or (isinstance(value, float) and math.isnan(value)):
-        return "n/a"
-    if k.unit == "percent":
-        d = 1 if decimals is None else decimals
-        return f"{value * 100:.{d}f}%"
-    suffix = {"hours": " h", "days": " days", "times_per_year": "x / year", "score": ""}[k.unit]
+        return "sin dato"
     d = 1 if decimals is None else decimals
+    if k.unit == "percent":
+        return pct(value, d)
     if k.unit == "score":
         return f"{value:+.0f}"
-    return f"{value:,.{d}f}{suffix}"
+    return f"{number(value, d)}{UNIT_SUFFIX[k.unit]}"
 
 
-def format_threshold(k: KPI) -> str:
-    """Human-readable target rule, e.g. '>= 90.0% (amber >= 85.0%)'."""
+def format_threshold(k: KPI, with_alert: bool = True) -> str:
+    """Target rule in words, e.g. '≥ 90.0 % (vigilar desde 85.0 %)'."""
 
     def f(v: float) -> str:
         return format_value(k, v)
 
     g, a = k.thresholds["green"], k.thresholds["amber"]
     if k.direction == "higher_is_better":
-        return f"≥ {f(g)} (amber ≥ {f(a)})"
-    if k.direction == "lower_is_better":
-        return f"≤ {f(g)} (amber ≤ {f(a)})"
-    return f"{f(g[0])} to {f(g[1])} (amber {f(a[0])} to {f(a[1])})"
+        main, alert = f"≥ {f(g)}", f"vigilar desde {f(a)}"
+    elif k.direction == "lower_is_better":
+        main, alert = f"≤ {f(g)}", f"vigilar hasta {f(a)}"
+    else:
+        main, alert = f"entre {f(g[0])} y {f(g[1])}", f"vigilar entre {f(a[0])} y {f(a[1])}"
+    return f"{main} ({alert})" if with_alert else main

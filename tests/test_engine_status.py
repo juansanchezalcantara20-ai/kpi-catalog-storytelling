@@ -31,12 +31,12 @@ def test_grade(kpi_id, value, expected):
 
 
 def test_format():
-    assert E.format("sla_compliance", 0.8766) == "87.7%"
+    assert E.format("sla_compliance", 0.8766) == "87.7 %"
     assert E.format("mttr", 4.25) == "4.2 h"
     assert E.format("nps", 23.4) == "+23"
-    assert E.format("nps", float("nan")) == "n/a"
+    assert E.format("nps", float("nan")) == "sin dato"
 
 
 def test_format_threshold():
-    assert format_threshold(E.catalog["sla_compliance"]) == "≥ 90.0% (amber ≥ 85.0%)"
-    assert format_threshold(E.catalog["days_of_cover"]).startswith("14.0 days to 35.0 days")
+    assert format_threshold(E.catalog["sla_compliance"]) == "≥ 90.0 % (vigilar desde 85.0 %)"
+    assert format_threshold(E.catalog["days_of_cover"]).startswith("entre 14.0 días y 35.0 días")

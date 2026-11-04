@@ -1,29 +1,29 @@
-# KPI catalog & storytelling
+# Indicadores que se entienden
 
-**The theory of a KPI does not depend on the tool.** Each KPI here is *defined once*
-in a YAML catalog, *calculated once* by a tested Python engine, and *presented in two tools*:
-this story website and an [interactive KPI dashboard](dashboard/index.html), both generated from the same catalog.
+**Un indicador no depende de la herramienta.** Cada indicador de este sitio se define una sola vez, se
+calcula una sola vez y se presenta de dos formas: como una **historia** que explica qué pasó y qué decidir,
+y como un **tablero** para revisarlo cada semana.
 
 <div class="grid cards" markdown>
 
-- **[Five business cases](cases/service.md)** - service SLA, maintenance, inventory,
-  customers and data quality, each told as *context → question → KPI → finding → decision → how we keep measuring*.
-- **[Anti-pattern gallery](antipatterns.md)** - the same data shown wrong and right, side by side.
-- **[KPI catalog](catalog/index.md)** - definition, formula, target, owner, how to read it,
-  common misreadings, SQL and a hand-calculated worked example for every KPI.
-- **[KPI dashboard](dashboard/index.html)** - all 28 KPIs as cards with status, trend and target; filters by domain and status.
+- **[Cinco casos](cases/service.md)**: atención de solicitudes, mantenimiento, inventario, clientes y calidad de los
+  datos. Cada uno cuenta qué pasó, por qué importa y qué se decidió.
+- **[Errores comunes al medir](antipatterns.md)**: el mismo dato mostrado de una forma que engaña y de una forma honesta, lado a lado.
+- **[Catálogo de indicadores](catalog/index.md)**: qué mide cada indicador, cómo se calcula, un ejemplo con números y
+  qué decisión ayuda a tomar.
+- **[Tablero](dashboard/index.html)**: los 28 indicadores con su semáforo, su tendencia y su meta, con filtros.
 
 </div>
 
-## Why this exists
+## Para quién es
 
-A dashboard is only as good as the definitions behind it. Most KPI problems are not tool
-problems: an average that hides a long tail, a fill rate that looks fine while customers get
-incomplete orders, a forecast error metric dominated by slow movers, a green traffic light
-with no target behind it. This site shows how each KPI is defined, read and turned into a
-decision, and the [method page](method.md) lists the chart rules every page follows.
+Para quien tiene que decidir con números sin ser analista: un jefe de operaciones, de mantenimiento, de
+logística o de servicio al cliente. Si es la primera vez, empiece por [Cómo leer este sitio](como-leer.md): en un
+minuto explica qué es un indicador, qué es una meta y cómo leer el semáforo 🟢 En meta · 🟡 Vigilar · 🔴 Actuar.
 
-!!! note "Data"
-    Only public (UCI, CC BY 4.0) or synthetic data. With synthetic data the findings
-    illustrate the method; they are not claims about a real organisation. See
-    [data sources](data-sources.md).
+## De dónde salen los datos
+
+El caso de atención de solicitudes usa **solicitudes ciudadanas reales de la ciudad de Nueva York** (servicio 311).
+Los casos de mantenimiento, inventario y clientes usan **datos públicos reales** del repositorio UCI combinados con
+simulaciones para lo que esas fuentes no registran. Cada página dice claramente qué parte es real y qué parte es
+simulada; los detalles están en [Fuentes de datos](data-sources.md).

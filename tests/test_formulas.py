@@ -91,10 +91,10 @@ def test_rfm_segments_by_hand():
             for i, d in enumerate(dates)
         ]
     rfm = rfm_table(pd.DataFrame(rows), snapshot=t("2024-12-31")).set_index("customer_id")
-    assert rfm.loc["champion", "segment"] == "Champions"
-    assert rfm.loc["old_loyal", "segment"] == "At risk"
-    assert rfm.loc["newbie", "segment"] == "New / promising"
-    assert rfm.loc["sleeper", "segment"] == "Hibernating"
+    assert rfm.loc["champion", "segment"] == "Campeones"
+    assert rfm.loc["old_loyal", "segment"] == "En riesgo"
+    assert rfm.loc["newbie", "segment"] == "Nuevos o prometedores"
+    assert rfm.loc["sleeper", "segment"] == "Dormidos"
     assert rfm.loc["old_loyal", "monetary"] == 400
 
 

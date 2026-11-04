@@ -1,0 +1,59 @@
+# Fuentes de datos públicas. La descarga corre en GitHub Actions (workflow "Actualizar datos").
+# Si una descarga falla, el sitio vuelve a los datos simulados y lo dice en cada página.
+# Ninguna fuente requiere cuenta ni clave de API.
+
+solicitudes:
+  # Caso 1 · Atención de solicitudes
+  nombre: "NYC 311 Service Requests"
+  publicador: "NYC Open Data (Ciudad de Nueva York), licencia de datos abiertos de NYC"
+  pagina: "https://data.cityofnewyork.us/Social-Services/311-Service-Requests-from-2010-to-Present/erm2-nwe9"
+  api: "https://data.cityofnewyork.us/resource/erm2-nwe9.csv"
+  # Solo columnas sin datos personales: nunca direcciones, coordenadas ni textos libres.
+  columnas: [unique_key, created_date, closed_date, agency, complaint_type, open_data_channel_type, status, borough]
+  filtros:
+    agencia: "DOT"            # Departamento de Transporte: alumbrado, calzadas, semáforos, veredas
+  periodo:
+    meses: 12                 # 12 meses completos...
+    corte: fin_mes_anterior   # ...que terminan el último día del mes anterior a la descarga
+  paginacion:
+    tamano_pagina: 50000
+    maximo_filas: 800000
+  minimo_filas: 5000          # menos que esto = descarga incompleta -> se usa el plan B
+  reintentos: 4
+  # Supuesto propio (no es una regla oficial de la ciudad): prioridad y plazo según el tipo de solicitud.
+  plazos_por_prioridad_horas:
+    Urgente: 24
+    Alta: 72
+    Media: 168
+    Baja: 336
+  tipos:
+    "Traffic Signal Condition": {etiqueta: "Semáforos", prioridad: Urgente}
+    "Street Light Condition": {etiqueta: "Alumbrado público", prioridad: Alta}
+    "Street Condition": {etiqueta: "Estado de la calzada", prioridad: Alta}
+    "Highway Condition": {etiqueta: "Autopistas", prioridad: Alta}
+    "Bridge Condition": {etiqueta: "Puentes", prioridad: Urgente}
+    "Sidewalk Condition": {etiqueta: "Veredas", prioridad: Media}
+    "Curb Condition": {etiqueta: "Sardineles", prioridad: Media}
+    "Street Sign - Damaged": {etiqueta: "Señales de tránsito", prioridad: Media}
+    "Street Sign - Missing": {etiqueta: "Señales de tránsito", prioridad: Media}
+    "Street Sign - Dangling": {etiqueta: "Señales de tránsito", prioridad: Alta}
+    "Broken Parking Meter": {etiqueta: "Parquímetros", prioridad: Baja}
+    "Broken Muni Meter": {etiqueta: "Parquímetros", prioridad: Baja}
+  tipo_por_defecto: {etiqueta: "Otros", prioridad: Media}
+  maximo_equipos: 5           # los tipos más frecuentes se muestran; el resto va a "Otros"
+  canales:
+    PHONE: "Teléfono"
+    ONLINE: "Web"
+    MOBILE: "App móvil"
+    UNKNOWN: "Otro"
+    OTHER: "Otro"
+
+mantenimiento:
+  nombre: "AI4I 2020 Predictive Maintenance Dataset"
+  publicador: "UCI Machine Learning Repository (Matzka, 2020), CC BY 4.0"
+  pagina: "https://archive.ics.uci.edu/dataset/601/ai4i+2020+predictive+maintenance+dataset"
+
+ventas:
+  nombre: "Online Retail II"
+  publicador: "UCI Machine Learning Repository (Chen, 2019), CC BY 4.0"
+  pagina: "https://archive.ics.uci.edu/dataset/502/online+retail+ii"

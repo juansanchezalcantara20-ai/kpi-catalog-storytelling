@@ -56,42 +56,37 @@ EXAMPLES: list[HandExample] = [
         "first_response_time",
         _tickets(),
         2.0,
-        "Responded tickets: 0.5, 1, 3, 6 h (ticket 5 has no response yet). "
-        "Median of 4 values = (1 + 3) / 2 = 2.0 h.",
+        "Cuatro solicitudes respondidas esperaron 0.5, 1, 3 y 6 horas (la quinta todavía no tiene respuesta). La del medio entre 4 valores es (1 + 3) / 2 = 2.0 horas.",
     ),
     HandExample(
         "resolution_time",
         _tickets(),
         20.0,
-        "Resolved: 4, 10, 30, 50 h. Median = (10 + 30) / 2 = 20.0 h. "
-        "(The mean would be 23.5 h, pulled up by the 50 h ticket.)",
+        "Cuatro solicitudes cerradas tardaron 4, 10, 30 y 50 horas. La del medio es (10 + 30) / 2 = 20.0 horas. El promedio sería 23.5 horas, inflado por la de 50.",
     ),
     HandExample(
         "sla_compliance",
         _tickets(),
         0.75,
-        "Within SLA: #1 10<=24 yes, #2 30<=24 no, #3 4<=8 yes, #4 50<=72 yes. "
-        "3 of 4 resolved = 0.75. The open ticket is not counted.",
+        "Cuatro solicitudes cerradas con plazos de 24, 24, 8 y 72 horas tardaron 10, 30, 4 y 50 horas. Tres cumplieron su plazo: 3 de 4 = 75 %. La solicitud abierta no cuenta.",
     ),
     HandExample(
         "backlog_aged_share",
         _backlog(),
         0.5,
-        "Open tickets aged 2, 8, 15, 7 days. Older than 7 days: 8 and 15 "
-        "(exactly 7 is not older). 2 / 4 = 0.5.",
+        "Hay cuatro solicitudes abiertas con 2, 8, 15 y 7 días. Llevan más de 7 días las de 8 y 15 (la de 7 exactos no). 2 de 4 = 50 %.",
     ),
     HandExample(
         "first_contact_resolution",
         _tickets(),
         0.5,
-        "Resolved with 1 contact and not reopened: #1 yes, #2 no (2 contacts), "
-        "#3 no (reopened), #4 yes. 2 / 4 = 0.5.",
+        "De cuatro solicitudes cerradas, dos se resolvieron con un solo contacto y sin reabrirse; una necesitó dos contactos y otra se reabrió. 2 de 4 = 50 %.",
     ),
     HandExample(
         "reopen_rate",
         _tickets(),
         0.25,
-        "Reopened among resolved: only #3. 1 / 4 = 0.25.",
+        "De cuatro solicitudes cerradas, una se reabrió: 1 de 4 = 25 %.",
     ),
     # ------------------------------------------------------------ maintenance
     HandExample(
@@ -104,8 +99,7 @@ EXAMPLES: list[HandExample] = [
             }
         ),
         400.0,
-        "Ratio of sums: (400 + 300 + 500) / (2 + 0 + 1) = 1200 / 3 = 400 h. "
-        "Averaging per-row MTBF would fail on the 0-failure row.",
+        "Dos máquinas operaron 400 + 300 + 500 = 1 200 horas y tuvieron 2 + 0 + 1 = 3 fallas: 1 200 / 3 = 400 horas entre fallas. Promediar mes por mes fallaría en el mes sin fallas.",
     ),
     HandExample(
         "mttr",
@@ -116,8 +110,7 @@ EXAMPLES: list[HandExample] = [
             }
         ),
         5.0,
-        "Corrective only: (2 + 3 + 10) / 3 = 5.0 h. The median would be 3.0 h - "
-        "one long repair drives the mean.",
+        "Tres reparaciones duraron 2, 3 y 10 horas: (2 + 3 + 10) / 3 = 5.0 horas en promedio. La reparación típica es de 3 horas: una sola reparación larga mueve el promedio.",
     ),
     HandExample(
         "availability",
@@ -128,7 +121,7 @@ EXAMPLES: list[HandExample] = [
             }
         ),
         0.975,
-        "(320 - 8) / 320 = 312 / 320 = 0.975.",
+        "Dos meses con 160 horas programadas cada uno (320 en total) y 8 horas perdidas por fallas: (320 − 8) / 320 = 97.5 %.",
     ),
     HandExample(
         "pm_compliance",
@@ -152,21 +145,20 @@ EXAMPLES: list[HandExample] = [
             }
         ),
         0.5,
-        "Tolerance 3 days. PM1 on the day: on time. PM2 +3 days: on time (limit inclusive). "
-        "PM3 +4 days: late. PM4 not done: late. Corrective ignored. 2 / 4 = 0.5.",
+        "Con 3 días de tolerancia: un preventivo se hizo el día programado (a tiempo), otro 3 días después (a tiempo, el límite cuenta), otro 4 días después (tarde) y otro no se hizo (tarde). 2 de 4 = 50 %.",
     ),
     HandExample(
         "planned_work_share",
         pd.DataFrame({"planned": [True, True, False], "labor_hours": [4.0, 2.0, 6.0]}),
         0.5,
-        "Planned hours 4 + 2 = 6 of 12 total = 0.5 (counting work orders would give 2/3).",
+        "Hubo 4 + 2 = 6 horas de trabajo planificado de 12 horas en total: 50 %. Contando órdenes en vez de horas saldría 2 de 3.",
     ),
     # -------------------------------------------------------------- inventory
     HandExample(
         "fill_rate",
         pd.DataFrame({"qty_ordered": [10, 5, 5], "qty_shipped": [10, 3, 5]}),
         0.9,
-        "Shipped 18 of 20 units ordered = 0.9.",
+        "Se pidieron 20 unidades y se despacharon 18: 90 %.",
     ),
     HandExample(
         "otif",
@@ -186,9 +178,7 @@ EXAMPLES: list[HandExample] = [
             }
         ),
         0.5,
-        "Order 1: both lines full and on time -> OK. Order 2: one day late -> fail. "
-        "Order 3: short (1 of 2) -> fail. Order 4: OK. 2 OK of 4 orders = 0.5. "
-        "Fill rate on the same data is 18/19 = 94.7%: OTIF is stricter.",
+        "Pedido 1: dos líneas completas y a tiempo, bien. Pedido 2: un día tarde, falla. Pedido 3: llegó 1 de 2 unidades, falla. Pedido 4: bien. 2 de 4 pedidos = 50 %. Con los mismos datos, las unidades atendidas son 18 de 19 = 94.7 %: este indicador es más exigente.",
     ),
     HandExample(
         "inventory_turnover",
@@ -201,8 +191,7 @@ EXAMPLES: list[HandExample] = [
             }
         ),
         18.25,
-        "COGS 20 over 2 days, annualised: 20 * 365 / 2 = 3650. Inventory value per date: "
-        "100 + 100 = 200 and 50 + 150 = 200, average 200. Turnover = 3650 / 200 = 18.25x / year.",
+        "En 2 días se vendió a costo 20; llevado a un año: 20 × 365 / 2 = 3 650. El inventario valía 200 cada día, así que el promedio es 200. Rotación = 3 650 / 200 = 18.25 veces al año.",
     ),
     HandExample(
         "days_of_cover",
@@ -214,7 +203,7 @@ EXAMPLES: list[HandExample] = [
             }
         ),
         6.0,
-        "Average daily demand = 30 / 3 = 10 units. Stock on the last date = 60. 60 / 10 = 6.0 days.",
+        "En 3 días se vendieron 30 unidades: 10 por día. El último día quedan 60 unidades: 60 / 10 = 6 días de cobertura.",
     ),
     HandExample(
         "stockout_rate",
@@ -225,8 +214,7 @@ EXAMPLES: list[HandExample] = [
             }
         ),
         0.375,
-        "Active SKU-days: 8 (the last two rows are a discontinued SKU and are excluded). "
-        "At zero: 3 of 8 = 0.375. Counting the inactive rows would give 5 / 10 = 0.5.",
+        "De 8 días-producto activos (dos filas más son de un producto descontinuado y no cuentan), 3 terminaron sin inventario: 3 de 8 = 37.5 %. Contando el producto descontinuado saldría 5 de 10.",
     ),
     HandExample(
         "obsolescence_share",
@@ -234,27 +222,25 @@ EXAMPLES: list[HandExample] = [
             {"on_hand_value": [500.0, 300.0, 200.0], "days_since_last_movement": [10, 200, 181]}
         ),
         0.5,
-        "Limit 180 days. Older: 300 + 200 = 500 of 1000 total value = 0.5.",
+        "Con un límite de 180 días: dos productos valen 300 y 200 y no se venden hace 200 y 181 días. 500 de un inventario de 1 000 = 50 %.",
     ),
     HandExample(
         "mape",
         pd.DataFrame({"actual_units": [100, 10, 0], "forecast_units": [90, 20, 5]}),
         0.55,
-        "Row 3 dropped (actual 0). |100-90|/100 = 0.10; |10-20|/10 = 1.00. "
-        "Mean (0.10 + 1.00) / 2 = 0.55. The small SKU dominates.",
+        "Dos productos vendieron 100 y 10 unidades; el pronóstico dijo 90 y 20 (un tercero no vendió y se excluye). Errores: 10 % y 100 %. Promedio = 55 %: el producto pequeño domina.",
     ),
     HandExample(
         "wape",
         pd.DataFrame({"actual_units": [100, 10, 0], "forecast_units": [90, 20, 5]}),
         25 / 110,
-        "Sum |A-F| = 10 + 10 + 5 = 25. Sum A = 110. 25 / 110 = 0.22727. "
-        "Same data as MAPE: 22.7% vs 55%.",
+        "Con los mismos datos: los errores suman 10 + 10 + 5 = 25 unidades y se vendieron 110. 25 / 110 = 22.7 %, frente al 55 % del error promedio.",
     ),
     HandExample(
         "forecast_bias",
         pd.DataFrame({"actual_units": [100, 10, 0], "forecast_units": [90, 20, 5]}),
         5 / 110,
-        "(115 - 110) / 110 = +0.04545 -> 4.5% over-forecast, inside the +/-5% band.",
+        "Se pronosticaron 115 unidades y se vendieron 110: (115 − 110) / 110 = +4.5 %, dentro de la franja de ± 5 %.",
     ),
     # -------------------------------------------------------------- customers
     HandExample(
@@ -274,8 +260,7 @@ EXAMPLES: list[HandExample] = [
             }
         ),
         0.5,
-        "Q1 customers: a, b, c, d. Q2 customers: a, c, e. Retained = a, c. "
-        "2 / 4 = 0.5 (new customer e does not count).",
+        "En el primer trimestre compraron a, b, c y d; en el segundo, a, c y e. Volvieron a y c: 2 de 4 = 50 % (e es nuevo y no cuenta).",
     ),
     HandExample(
         "repeat_purchase_rate",
@@ -286,26 +271,24 @@ EXAMPLES: list[HandExample] = [
             }
         ),
         1 / 3,
-        "Distinct invoices: a = 2 (i1, i2), b = 1 (two lines of i3), c = 1. "
-        "1 of 3 customers repeats = 0.3333. Counting lines would wrongly give 2/3.",
+        "El cliente a tiene 2 facturas, b tiene 1 (con dos líneas) y c tiene 1. Solo a repitió: 1 de 3 = 33.3 %. Contando líneas en vez de facturas saldría 2 de 3, mal.",
     ),
     HandExample(
         "revenue_at_risk_share",
         pd.DataFrame(
             {
-                "segment": ["Champions", "At risk", "At risk", "Hibernating"],
+                "segment": ["Campeones", "En riesgo", "En riesgo", "Dormidos"],
                 "monetary": [500.0, 200.0, 100.0, 200.0],
             }
         ),
         0.3,
-        "At risk revenue 200 + 100 = 300 of 1000 = 0.3.",
+        "Los clientes «en riesgo» compraron 200 + 100 = 300 de un ingreso total de 1 000: 30 %.",
     ),
     HandExample(
         "nps",
         pd.DataFrame({"score": [10, 9, 9, 8, 7, 6, 3, 10, 0, 9]}),
         20.0,
-        "Promoters (9-10): 10, 9, 9, 10, 9 = 5. Detractors (0-6): 6, 3, 0 = 3. "
-        "Passives: 2. NPS = 100 * (5 - 3) / 10 = +20. The mean score 7.1 is not NPS.",
+        "Diez respuestas: 5 promotores (9 o 10), 3 detractores (0 a 6) y 2 neutros. 100 × (5 − 3) / 10 = +20. La nota promedio, 7.1, no es este indicador.",
     ),
     # ----------------------------------------------------------- data quality
     HandExample(
@@ -314,23 +297,21 @@ EXAMPLES: list[HandExample] = [
             {"id": [1, 2, 3, 4], "customer": ["x", None, "", "y"], "amount": [1.0, 2.0, None, 4.0]}
         ),
         0.625,
-        "Required columns customer, amount: 4 rows x 2 = 8 cells. customer is missing twice "
-        "(None and a blank string), amount once. 5 filled of 8 = 0.625.",
+        "Dos campos obligatorios en 4 filas = 8 celdas. El cliente falta dos veces (una vacía y otra en blanco) y el monto una vez: 5 de 8 llenas = 62.5 %.",
         overrides={"columns": ["customer", "amount"]},
     ),
     HandExample(
         "dq_uniqueness",
         pd.DataFrame({"ticket_id": [1, 2, 2, 3, 3]}),
         0.6,
-        "Distinct keys 1, 2, 3 = 3 of 5 rows = 0.6.",
+        "Cinco filas con las claves 1, 2, 2, 3, 3: hay 3 registros distintos. 3 de 5 = 60 %.",
         overrides={"key": ["ticket_id"]},
     ),
     HandExample(
         "dq_validity",
         pd.DataFrame({"quantity": [5, -1, 3, 0], "price": [2.0, 2.0, -1.0, 1.0]}),
         0.25,
-        "Rules: quantity > 0 and price >= 0. Row 1 passes; row 2 fails quantity; "
-        "row 3 fails price; row 4 fails quantity. 1 / 4 = 0.25 (rows, not rule failures).",
+        "Reglas: cantidad mayor que cero y precio no negativo. La fila 1 cumple; la 2 falla la cantidad; la 3, el precio; la 4, la cantidad. 1 de 4 = 25 % (se cuentan filas, no fallas).",
         overrides={"rules": ["quantity > 0", "price >= 0"]},
     ),
     HandExample(
@@ -347,7 +328,7 @@ EXAMPLES: list[HandExample] = [
             }
         ),
         0.5,
-        "Max delay 24 h. Delays 1 h, 24 h (inclusive, on time), 24 h 1 min, 88 h. 2 / 4 = 0.5.",
+        "Plazo de 24 horas. Cuatro registros llegaron 1 h, 24 h (justo a tiempo), 24 h y 1 minuto, y 88 h después. 2 de 4 = 50 %.",
         overrides={"event_col": "event_at", "loaded_col": "loaded_at", "max_delay_hours": 24},
     ),
 ]
