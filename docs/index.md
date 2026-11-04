@@ -11,6 +11,7 @@ this website and a Power BI semantic layer generated from the same catalog.
 - **[Anti-pattern gallery](antipatterns.md)** - the same data shown wrong and right, side by side.
 - **[KPI catalog](catalog/index.md)** - definition, formula, target, owner, how to read it,
   common misreadings, DAX, SQL and a hand-calculated worked example for every KPI.
+- **[Power BI layer](powerbi.md)** - DAX measures and star schema generated from the same catalog.
 
 </div>
 

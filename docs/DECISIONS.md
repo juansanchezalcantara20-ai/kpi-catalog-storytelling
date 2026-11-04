@@ -79,3 +79,15 @@ decisions are appended at the end of each phase.
 | 50 | The traffic-light pair colours the misleading side **relative to the fleet average**. | It is the subtle and common version of "status without a target": half the fleet is red by construction. |
 | 51 | The "too many series" message is chosen by the data (the top-10 SKU whose demand dropped most) with a conditional title. | A first draft claimed a SKU was "seasonal" with 29% of its year in Q4 - barely above the 25% of a flat year. The claim was replaced by one the data supports. |
 | 52 | CI also runs `make all SOURCE=synthetic` on every push. | The site generator is code too; a broken page should fail the build, not the deploy. |
+
+## Phase 6 · Power BI layer
+
+| # | Decision | Why |
+|---|----------|-----|
+| 53 | **No PBIP/TMDL project.** The repository ships `powerbi/measures.dax`, `powerbi/MODEL.md` and `powerbi/BUILD_CHECKLIST.md` instead. | Power BI Desktop cannot run in the build environment, so a generated TMDL project could not be opened to prove it valid. Shipping an unverified project as if it worked would be dishonest; the fallback is what was asked for in that case. |
+| 54 | `measures.dax` is written in **DAX query view format** (`DEFINE MEASURE … EVALUATE ROW(…)`). | Desktop's DAX query view can add every measure to the model in one step, and the `EVALUATE` returns all KPIs in one row for reconciliation. |
+| 55 | `expected_values.csv` (Python results on the same data) is exported next to the model tables, with the filter context needed where the KPI is time-relative. | Turns "trust me, the DAX matches" into a five-minute check in Desktop. |
+| 56 | Rule-dependent flags (`within_sla`, `pm_on_time`, `active`) are **computed in Python and exported as columns**. | The rule is written once with its catalog parameter; DAX only counts the flag. |
+| 57 | Measure names are the catalog names stripped of brackets and symbols; each measure lives in its KPI's input table. | Avoids escaping problems in DAX object names and keeps measures next to the facts they count. |
+| 58 | The committed Power BI files are **tested to be identical to what the catalog generates**; data CSVs are not committed. | Guarantees the DAX in the repository is the DAX in the catalog. CSVs are reproducible with `make data powerbi` (and on a normal network will contain the real UCI data). |
+| 59 | `powerbi/theme.json` is generated from the same palette module as the website. | Two tools, one visual language. |

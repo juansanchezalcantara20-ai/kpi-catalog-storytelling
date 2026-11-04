@@ -47,7 +47,7 @@ nav:
       - 5 · Data quality as a KPI: cases/data_quality.md
   - Anti-pattern gallery: antipatterns.md
   - KPI catalog: catalog/index.md
-  # - Power BI layer: powerbi.md
+  - Power BI layer: powerbi.md
   - About:
       - How this site reads: method.md
       - Data sources: data-sources.md
