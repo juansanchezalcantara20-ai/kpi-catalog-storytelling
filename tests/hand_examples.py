@@ -218,9 +218,15 @@ EXAMPLES: list[HandExample] = [
     ),
     HandExample(
         "stockout_rate",
-        pd.DataFrame({"on_hand_units": [0, 5, 3, 0, 10, 2, 0, 1]}),
+        pd.DataFrame(
+            {
+                "on_hand_units": [0, 5, 3, 0, 10, 2, 0, 1, 0, 0],
+                "active": [True] * 8 + [False, False],
+            }
+        ),
         0.375,
-        "SKU-days at zero: 3 of 8 = 0.375.",
+        "Active SKU-days: 8 (the last two rows are a discontinued SKU and are excluded). "
+        "At zero: 3 of 8 = 0.375. Counting the inactive rows would give 5 / 10 = 0.5.",
     ),
     HandExample(
         "obsolescence_share",

@@ -1,0 +1,63 @@
+# Data-quality rules per landing dataset (case 5).
+#
+# Measured on the data *as it lands*, before cleaning - that is where defects live.
+# The four dimensions are the catalog KPIs dq_completeness, dq_uniqueness, dq_validity
+# and dq_timeliness; this file only says which columns, keys and rules apply.
+#   required:   columns that downstream KPIs depend on (completeness)
+#   key:        business key that must be unique (uniqueness)
+#   rules:      pandas expressions every row must satisfy (validity)
+#   timeliness: event and load timestamp columns and the allowed delay; null = not measurable
+
+datasets:
+  tickets:
+    label: Service tickets
+    feeds: [service]
+    required: [ticket_id, created_at, priority, queue, channel, status]
+    key: [ticket_id]
+    rules:
+      "resolved after created": "resolved_at.isna() | (resolved_at >= created_at)"
+      "SLA target defined": "sla_target_hours > 0"
+      "status is known": "status.isin(['open', 'resolved'])"
+    timeliness: {event_col: created_at, loaded_col: logged_at, max_delay_hours: 24}
+
+  work_orders:
+    label: Maintenance work orders
+    feeds: [maintenance]
+    required: [wo_id, asset_id, wo_type, created_at, labor_hours]
+    key: [wo_id]
+    rules:
+      "labour hours > 0": "labor_hours > 0"
+      "corrective has failure mode": "(wo_type != 'corrective') | failure_mode.notna()"
+      "completed after created": "completed_at.isna() | (completed_at >= created_at)"
+    timeliness: {event_col: completed_at, loaded_col: logged_at, max_delay_hours: 24}
+
+  process_data:
+    label: Process sensor data (AI4I 2020)
+    feeds: [maintenance]
+    required: [UDI, Type, "Air temperature [K]", "Process temperature [K]", "Rotational speed [rpm]", "Torque [Nm]", "Tool wear [min]"]
+    key: [UDI]
+    rules:
+      "temperatures plausible": "`Air temperature [K]`.between(280, 320) & `Process temperature [K]`.between(285, 330)"
+      "speed and torque positive": "(`Rotational speed [rpm]` > 0) & (`Torque [Nm]` > 0)"
+      "product type known": "Type.isin(['L', 'M', 'H'])"
+    timeliness: null
+
+  transactions:
+    label: Sales transactions (Online Retail II)
+    feeds: [inventory, customers]
+    required: [Invoice, StockCode, Quantity, InvoiceDate, Price, "Customer ID"]
+    key: [Invoice, StockCode, Description, Quantity, InvoiceDate, Price, "Customer ID", Country]
+    rules:
+      "quantity > 0 unless cancellation": "(Quantity > 0) | Invoice.str.startswith('C')"
+      "price > 0": "Price > 0"
+      "product code (not postage/fees)": "~StockCode.str.upper().isin(['POST', 'DOT', 'M', 'C2', 'BANK CHARGES', 'PADS', 'D', 'CRUK', 'ADJUST', 'AMAZONFEE', 'S', 'B'])"
+    timeliness: null
+
+  survey:
+    label: NPS survey responses (simulated)
+    feeds: [customers]
+    required: [response_id, customer_id, score, responded_at]
+    key: [response_id]
+    rules:
+      "score within 0-10": "score.between(0, 10)"
+    timeliness: {event_col: responded_at, loaded_col: loaded_at, max_delay_hours: 24}

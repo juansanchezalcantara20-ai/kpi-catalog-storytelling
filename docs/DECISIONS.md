@@ -23,3 +23,19 @@ decisions are appended at the end of each phase.
 | 14 | NPS is computed as % promoters − % detractors on a −100…+100 scale, with a margin-of-error helper. | The two most common NPS errors are averaging the 0–10 scores and over-reading small samples; both are tested. |
 | 15 | Data-quality KPIs are generic functions; the per-dataset rules live in `kpis/dq_rules.yaml`. | Lets the same four dimensions be measured on every dataset of the repo, which is the point of case 5. |
 | 16 | Package layout `src/kpistory`, `pyproject.toml`, `ruff` for lint + format, `pytest`, a `Makefile` with `make all`. | Standard, boring and reproducible. `make all` is the single command that rebuilds everything. |
+
+## Phase 2 · Ingestion, cleaning and plan B
+
+| # | Decision | Why |
+|---|----------|-----|
+| 17 | Data source mode `auto` (default): try the public download, fall back to the seeded generator on **any** error; `real` and `synthetic` force one path. | Rule: a network failure must never stop the build. CI tests use `synthetic` for determinism; the site build uses `auto`. |
+| 18 | Provenance is written to `data/processed/manifest.json` and printed on the site. | A reader must always know whether a chart is real or synthetic data. |
+| 19 | **In the build session, both UCI downloads failed** (the sandbox proxy blocked `archive.ics.uci.edu`, HTTP 403), so the committed screenshots use plan B. GitHub Actions can reach UCI, so the published site may use the real files. | Honest reporting; the page texts are generated from the data, so they stay correct either way. |
+| 20 | Service tickets are **always synthetic** and generated with a **priority-queue simulation with daily capacity**, not with independent random durations. | No public ticket log has SLA targets and reopenings. A first version with independent durations produced no backlog at all - unrealistic. Queues with capacity produce backlog, ageing and SLA breaches the way service desks really do. |
+| 21 | AI4I plan B re-implements the **published generation rules** of AI4I. | AI4I is itself synthetic; reproducing its rules keeps the failure physics (tool wear × torque → overstrain) that the case relies on. |
+| 22 | AI4I records are mapped to 10 machines × 1,000 contiguous 4-hour runs. | AI4I has no machine id or timestamp. Contiguous blocks keep the tool-wear sequence intact; the assumption is stated on the page. |
+| 23 | Work orders, stock, forecast, deliveries and the NPS survey are simulated with **explicit, documented policies** (see `cases/*/README.md`). | The public data covers demand and process; the operational half is simulated transparently instead of being presented as observed. |
+| 24 | The forecast is an **8-week moving average** on purpose. | It is the most common baseline in practice, and its lag around the Q4 season produces the bias / stockout / excess pattern the case explains. |
+| 25 | Stockout rate counts the **active assortment** only (between a SKU's first and last demand). | The first simulation showed 18% stockouts, almost all of them SKUs not yet launched or already discontinued. The catalog definition, DAX, SQL and the hand example were updated together. |
+| 26 | Data quality is measured on the **landing** tables (before cleaning); cleaning rules are code (`clean*` functions). | Measuring after cleaning would always show 100%; the gap between landing and clean data is the DQ story. |
+| 27 | Processed tables are Parquet (`pyarrow`). | Keeps dtypes (timestamps, booleans) between pipeline and site without re-parsing. |

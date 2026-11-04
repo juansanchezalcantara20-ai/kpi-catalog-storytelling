@@ -21,7 +21,7 @@ def validity_mask(df: pd.DataFrame, rules: list[str]) -> pd.Series:
     """True for rows passing every rule (pandas eval expressions); NaN results fail."""
     ok = pd.Series(True, index=df.index)
     for rule in rules:
-        ok &= df.eval(rule).fillna(False).astype(bool)
+        ok &= pd.Series(df.eval(rule, engine="python"), index=df.index).fillna(False).astype(bool)
     return ok
 
 

@@ -65,7 +65,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         p.set_defaults(func=func)
     sub.add_parser("site", help="generate the MkDocs pages and charts").set_defaults(func=cmd_site)
-    sub.add_parser("powerbi", help="generate the Power BI layer from the catalog").set_defaults(func=cmd_powerbi)
+    sub.add_parser("powerbi", help="generate the Power BI layer from the catalog").set_defaults(
+        func=cmd_powerbi
+    )
     args = parser.parse_args(argv)
     return args.func(args)
 
