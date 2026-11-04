@@ -43,7 +43,8 @@ def days_of_cover(df: pd.DataFrame) -> float:
 
 @kpi("stockout_rate")
 def stockout_rate(df: pd.DataFrame) -> float:
-    return safe_ratio((df["on_hand_units"] <= 0).sum(), len(df))
+    active = df[df["active"].astype(bool)]
+    return safe_ratio((active["on_hand_units"] <= 0).sum(), len(active))
 
 
 @kpi("obsolescence_share")

@@ -1,0 +1,54 @@
+site_name: KPI catalog & storytelling
+site_description: One KPI catalog, one calculation engine, two presentation layers.
+site_author: Juan Luis Sánchez Alcántara
+repo_url: https://github.com/juansanchezalcantara20-ai/kpi-catalog-storytelling
+edit_uri: ""
+docs_dir: docs
+site_dir: site
+strict: true
+
+theme:
+  name: material
+  custom_dir: overrides
+  palette:
+    scheme: default
+    primary: custom
+    accent: custom
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - toc.follow
+  icon:
+    logo: material/chart-box-outline
+
+extra_css:
+  - assets/css/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+
+nav:
+  - Home: index.md
+  - Cases:
+      - 1 · Service operations & SLA: cases/service.md
+      - 2 · Maintenance: cases/maintenance.md
+      - 3 · Inventory & demand: cases/inventory.md
+      - 4 · Customers: cases/customers.md
+      - 5 · Data quality as a KPI: cases/data_quality.md
+  - Anti-pattern gallery: antipatterns.md
+  - KPI catalog: catalog/index.md
+  - Power BI layer: powerbi.md
+  - About:
+      - How this site reads: method.md
+      - Data sources: data-sources.md
+      - Decision log: DECISIONS.md

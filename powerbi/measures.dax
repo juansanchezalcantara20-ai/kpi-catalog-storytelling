@@ -1,0 +1,294 @@
+// GENERATED FROM kpis/catalog.yaml by `kpistory powerbi` - do not edit by hand.
+
+// Every KPI of the catalog as a DAX measure. Two ways to load them:
+//  1. Power BI Desktop > DAX query view: paste this file, run it, then use
+//     'Update model with changes' (or the 'Update model: Add new measure' CodeLens).
+//  2. Or create each measure by hand (Modeling > New measure) and paste its expression.
+// The EVALUATE at the end returns every KPI in one row - compare it with
+// powerbi/data/expected_values.csv, produced by the Python engine on the same data.
+
+DEFINE
+    // ===== Service operations & SLA =====
+    // First response time (median) | hours, lower is better | target ≤ 2.0 h (amber ≤ 4.0 h) | owner: Service Desk Lead
+    // Q: How long does a customer wait before a human acknowledges the ticket?
+    // Format string: 0.0 "h"
+    MEASURE Tickets[First response time median] =
+        MEDIAN ( Tickets[first_response_hours] )
+
+    // Resolution time (median) | hours, lower is better | target ≤ 24.0 h (amber ≤ 36.0 h) | owner: Service Desk Manager
+    // Q: How long does it take to solve a customer's problem end to end?
+    // Format string: 0.0 "h"
+    MEASURE Tickets[Resolution time median] =
+        CALCULATE ( MEDIAN ( Tickets[resolution_hours] ), Tickets[status] = "resolved" )
+
+    // SLA compliance | percent, higher is better | target ≥ 90.0% (amber ≥ 85.0%) | owner: Service Desk Manager
+    // Q: What share of tickets did we resolve within the time we promised?
+    // Format string: 0.0%
+    MEASURE Tickets[SLA compliance] =
+        DIVIDE (
+            CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved", Tickets[within_sla] = TRUE () ),
+            CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved" )
+        )
+
+    // Aged backlog (> 7 days) | percent, lower is better | target ≤ 10.0% (amber ≤ 20.0%) | owner: Queue Team Lead
+    // Q: How much of the open work is already old enough to hurt the SLA?
+    // Format string: 0.0%
+    MEASURE Tickets[Aged backlog 7 days] =
+        DIVIDE (
+            CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "open", Tickets[age_days] > 7 ),
+            CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "open" )
+        )
+
+    // First contact resolution (FCR) | percent, higher is better | target ≥ 70.0% (amber ≥ 60.0%) | owner: Service Desk Manager
+    // Q: How often do we solve the problem in a single interaction?
+    // Format string: 0.0%
+    MEASURE Tickets[First contact resolution FCR] =
+        DIVIDE (
+            CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved", Tickets[contacts] = 1, Tickets[reopened] = FALSE () ),
+            CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved" )
+        )
+
+    // Reopen rate | percent, lower is better | target ≤ 5.0% (amber ≤ 8.0%) | owner: Quality Lead (Service)
+    // Q: How often is a "resolved" ticket not really resolved?
+    // Format string: 0.0%
+    MEASURE Tickets[Reopen rate] =
+        DIVIDE (
+            CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved", Tickets[reopened] = TRUE () ),
+            CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved" )
+        )
+
+    // ===== Maintenance & asset reliability =====
+    // Mean time between failures (MTBF) | hours, higher is better | target ≥ 150.0 h (amber ≥ 100.0 h) | owner: Reliability Engineer
+    // Q: How long does an asset run, on average, before it fails?
+    // Format string: 0.0 "h"
+    MEASURE AssetPeriods[Mean time between failures MTBF] =
+        DIVIDE ( SUM ( AssetPeriods[operating_hours] ), SUM ( AssetPeriods[failures] ) )
+
+    // Mean time to repair (MTTR) | hours, lower is better | target ≤ 4.0 h (amber ≤ 6.0 h) | owner: Maintenance Supervisor
+    // Q: Once an asset fails, how long until it runs again?
+    // Format string: 0.0 "h"
+    MEASURE WorkOrders[Mean time to repair MTTR] =
+        CALCULATE ( AVERAGE ( WorkOrders[repair_hours] ), WorkOrders[wo_type] = "corrective" )
+
+    // Availability | percent, higher is better | target ≥ 97.0% (amber ≥ 95.0%) | owner: Maintenance Manager
+    // Q: Of the time the asset was supposed to run, how much could it actually run?
+    // Format string: 0.0%
+    MEASURE AssetPeriods[Availability] =
+        DIVIDE (
+            SUM ( AssetPeriods[scheduled_hours] ) - SUM ( AssetPeriods[unplanned_downtime_hours] ),
+            SUM ( AssetPeriods[scheduled_hours] )
+        )
+
+    // Preventive maintenance compliance | percent, higher is better | target ≥ 90.0% (amber ≥ 80.0%) | owner: Maintenance Planner
+    // Q: Are we doing the preventive work we planned, when we planned it?
+    // Format string: 0.0%
+    MEASURE WorkOrders[Preventive maintenance compliance] =
+        DIVIDE (
+            CALCULATE ( COUNTROWS ( WorkOrders ), WorkOrders[wo_type] = "preventive", WorkOrders[pm_on_time] = TRUE () ),
+            CALCULATE ( COUNTROWS ( WorkOrders ), WorkOrders[wo_type] = "preventive" )
+        )
+
+    // Planned maintenance share | percent, higher is better | target ≥ 80.0% (amber ≥ 65.0%) | owner: Maintenance Manager
+    // Q: How much of our maintenance effort is planned rather than reactive?
+    // Format string: 0.0%
+    MEASURE WorkOrders[Planned maintenance share] =
+        DIVIDE (
+            CALCULATE ( SUM ( WorkOrders[labor_hours] ), WorkOrders[planned] = TRUE () ),
+            SUM ( WorkOrders[labor_hours] )
+        )
+
+    // ===== Inventory & demand =====
+    // Fill rate (units) | percent, higher is better | target ≥ 95.0% (amber ≥ 90.0%) | owner: Supply Planner
+    // Q: Of the units customers asked for, how many did we ship from stock?
+    // Format string: 0.0%
+    MEASURE OrderLines[Fill rate units] =
+        DIVIDE ( SUM ( OrderLines[qty_shipped] ), SUM ( OrderLines[qty_ordered] ) )
+
+    // On time in full (OTIF) | percent, higher is better | target ≥ 90.0% (amber ≥ 80.0%) | owner: Logistics Manager
+    // Q: How many orders arrived complete and on the promised date?
+    // Format string: 0.0%
+    MEASURE OrderLines[On time in full OTIF] =
+        VAR _orders = VALUES ( OrderLines[order_id] )
+        VAR _ok =
+            COUNTROWS (
+                FILTER (
+                    _orders,
+                    CALCULATE (
+                        ISEMPTY (
+                            FILTER (
+                                OrderLines,
+                                OrderLines[qty_shipped] < OrderLines[qty_ordered]
+                                    || ISBLANK ( OrderLines[delivered_date] )
+                                    || OrderLines[delivered_date] > OrderLines[promised_date]
+                            )
+                        )
+                    )
+                )
+            )
+        RETURN DIVIDE ( _ok, COUNTROWS ( _orders ) )
+
+    // Inventory turnover | times_per_year, higher is better | target ≥ 8.0x / year (amber ≥ 5.0x / year) | owner: Inventory Controller
+    // Q: How many times a year does the stock we hold get sold?
+    // Format string: 0.0"x"
+    MEASURE InventoryDaily[Inventory turnover] =
+        VAR _days = DISTINCTCOUNT ( InventoryDaily[date] )
+        VAR _cogs = SUM ( InventoryDaily[cogs_value] )
+        VAR _avgInv = AVERAGEX ( VALUES ( InventoryDaily[date] ), CALCULATE ( SUM ( InventoryDaily[on_hand_value] ) ) )
+        RETURN DIVIDE ( _cogs * 365 / _days, _avgInv )
+
+    // Days of cover | days, target range | target 14.0 days to 35.0 days (amber 7.0 days to 60.0 days) | owner: Supply Planner
+    // Q: If demand continues as usual, how many days will current stock last?
+    // Format string: 0.0 "d"
+    MEASURE InventoryDaily[Days of cover] =
+        VAR _last = MAX ( InventoryDaily[date] )
+        VAR _onHand = CALCULATE ( SUM ( InventoryDaily[on_hand_units] ), InventoryDaily[date] = _last )
+        VAR _avgDemand = DIVIDE ( SUM ( InventoryDaily[demand_units] ), DISTINCTCOUNT ( InventoryDaily[date] ) )
+        RETURN DIVIDE ( _onHand, _avgDemand )
+
+    // Stockout rate (SKU-days) | percent, lower is better | target ≤ 3.0% (amber ≤ 6.0%) | owner: Supply Planner
+    // Q: How often is an item simply not available?
+    // Format string: 0.0%
+    MEASURE InventoryDaily[Stockout rate SKU-days] =
+        DIVIDE (
+            CALCULATE ( COUNTROWS ( InventoryDaily ), InventoryDaily[active] = TRUE (), InventoryDaily[on_hand_units] <= 0 ),
+            CALCULATE ( COUNTROWS ( InventoryDaily ), InventoryDaily[active] = TRUE () )
+        )
+
+    // Obsolete stock share | percent, lower is better | target ≤ 5.0% (amber ≤ 10.0%) | owner: Inventory Controller
+    // Q: How much of our inventory value has stopped moving?
+    // Format string: 0.0%
+    MEASURE InventorySnapshot[Obsolete stock share] =
+        DIVIDE (
+            CALCULATE ( SUM ( InventorySnapshot[on_hand_value] ), InventorySnapshot[days_since_last_movement] > 180 ),
+            SUM ( InventorySnapshot[on_hand_value] )
+        )
+
+    // Forecast error (MAPE) | percent, lower is better | target ≤ 40.0% (amber ≤ 60.0%) | owner: Demand Planner
+    // Q: On average, by what percentage does each item's forecast miss?
+    // Format string: 0.0%
+    MEASURE Forecast[Forecast error MAPE] =
+        AVERAGEX (
+            FILTER ( Forecast, Forecast[actual_units] > 0 ),
+            ABS ( Forecast[actual_units] - Forecast[forecast_units] ) / Forecast[actual_units]
+        )
+
+    // Forecast error (WAPE) | percent, lower is better | target ≤ 30.0% (amber ≤ 45.0%) | owner: Demand Planner
+    // Q: Of all the units we sold, how many did the forecast get wrong?
+    // Format string: 0.0%
+    MEASURE Forecast[Forecast error WAPE] =
+        DIVIDE (
+            SUMX ( Forecast, ABS ( Forecast[actual_units] - Forecast[forecast_units] ) ),
+            SUM ( Forecast[actual_units] )
+        )
+
+    // Forecast bias | percent, target range | target -5.0% to 5.0% (amber -10.0% to 10.0%) | owner: Demand Planner
+    // Q: Do we systematically forecast too much or too little?
+    // Format string: 0.0%
+    MEASURE Forecast[Forecast bias] =
+        DIVIDE (
+            SUM ( Forecast[forecast_units] ) - SUM ( Forecast[actual_units] ),
+            SUM ( Forecast[actual_units] )
+        )
+
+    // ===== Customers =====
+    // Customer retention (quarter over quarter) | percent, higher is better | target ≥ 50.0% (amber ≥ 40.0%) | owner: Customer Success / CRM Lead
+    // Q: Of the customers who bought last quarter, how many bought again this quarter?
+    // Format string: 0.0%
+    MEASURE Sales[Customer retention quarter over quarter] =
+        VAR _current = VALUES ( Sales[customer_id] )
+        VAR _previous = CALCULATETABLE ( VALUES ( Sales[customer_id] ), DATEADD ( 'Date'[Date], -1, QUARTER ) )
+        RETURN DIVIDE ( COUNTROWS ( INTERSECT ( _previous, _current ) ), COUNTROWS ( _previous ) )
+
+    // Repeat purchase rate | percent, higher is better | target ≥ 60.0% (amber ≥ 50.0%) | owner: CRM Lead
+    // Q: What share of customers come back for a second order?
+    // Format string: 0.0%
+    MEASURE Sales[Repeat purchase rate] =
+        VAR _c = ADDCOLUMNS ( VALUES ( Sales[customer_id] ), "@orders", CALCULATE ( DISTINCTCOUNT ( Sales[invoice_id] ) ) )
+        RETURN DIVIDE ( COUNTROWS ( FILTER ( _c, [@orders] >= 2 ) ), COUNTROWS ( _c ) )
+
+    // Revenue at risk (RFM "At risk") | percent, lower is better | target ≤ 10.0% (amber ≤ 20.0%) | owner: CRM Lead
+    // Q: How much of our revenue comes from good customers who have stopped buying?
+    // Format string: 0.0%
+    MEASURE Sales[Revenue at risk RFM At risk] =
+        DIVIDE (
+            CALCULATE ( SUM ( Sales[revenue] ), Customers[rfm_segment] = "At risk" ),
+            SUM ( Sales[revenue] )
+        )
+
+    // Net Promoter Score (simulated survey) | score, higher is better | target ≥ +30 (amber ≥ +10) | owner: Customer Experience Lead
+    // Q: Would our customers recommend us?
+    // Format string: +0;-0;0
+    MEASURE Survey[Net Promoter Score simulated survey] =
+        VAR _n = COUNTROWS ( Survey )
+        VAR _p = CALCULATE ( COUNTROWS ( Survey ), Survey[score] >= 9 )
+        VAR _d = CALCULATE ( COUNTROWS ( Survey ), Survey[score] <= 6 )
+        RETURN DIVIDE ( _p - _d, _n ) * 100
+
+    // ===== Data quality as a KPI =====
+    // Completeness | percent, higher is better | target ≥ 99.0% (amber ≥ 95.0%) | owner: Data Steward
+    // Q: Are the fields we need actually filled in?
+    // Format string: 0.0%
+    MEASURE DQResults[Completeness] =
+        DIVIDE (
+            CALCULATE ( SUM ( DQResults[passed] ), DQResults[dimension] = "completeness" ),
+            CALCULATE ( SUM ( DQResults[total] ), DQResults[dimension] = "completeness" )
+        )
+
+    // Uniqueness | percent, higher is better | target ≥ 99.9% (amber ≥ 99.0%) | owner: Data Steward
+    // Q: Is each real-world record stored exactly once?
+    // Format string: 0.0%
+    MEASURE DQResults[Uniqueness] =
+        DIVIDE (
+            CALCULATE ( SUM ( DQResults[passed] ), DQResults[dimension] = "uniqueness" ),
+            CALCULATE ( SUM ( DQResults[total] ), DQResults[dimension] = "uniqueness" )
+        )
+
+    // Validity | percent, higher is better | target ≥ 98.0% (amber ≥ 95.0%) | owner: Data Steward
+    // Q: Do the values respect the business rules?
+    // Format string: 0.0%
+    MEASURE DQResults[Validity] =
+        DIVIDE (
+            CALCULATE ( SUM ( DQResults[passed] ), DQResults[dimension] = "validity" ),
+            CALCULATE ( SUM ( DQResults[total] ), DQResults[dimension] = "validity" )
+        )
+
+    // Timeliness | percent, higher is better | target ≥ 95.0% (amber ≥ 90.0%) | owner: Data Engineer
+    // Q: Is the data available soon enough after the event to act on it?
+    // Format string: 0.0%
+    MEASURE DQResults[Timeliness] =
+        DIVIDE (
+            CALCULATE ( SUM ( DQResults[passed] ), DQResults[dimension] = "timeliness" ),
+            CALCULATE ( SUM ( DQResults[total] ), DQResults[dimension] = "timeliness" )
+        )
+
+EVALUATE
+ROW (
+    "first_response_time", [First response time median],
+    "resolution_time", [Resolution time median],
+    "sla_compliance", [SLA compliance],
+    "backlog_aged_share", [Aged backlog 7 days],
+    "first_contact_resolution", [First contact resolution FCR],
+    "reopen_rate", [Reopen rate],
+    "mtbf", [Mean time between failures MTBF],
+    "mttr", [Mean time to repair MTTR],
+    "availability", [Availability],
+    "pm_compliance", [Preventive maintenance compliance],
+    "planned_work_share", [Planned maintenance share],
+    "fill_rate", [Fill rate units],
+    "otif", [On time in full OTIF],
+    "inventory_turnover", [Inventory turnover],
+    "days_of_cover", [Days of cover],
+    "stockout_rate", [Stockout rate SKU-days],
+    "obsolescence_share", [Obsolete stock share],
+    "mape", [Forecast error MAPE],
+    "wape", [Forecast error WAPE],
+    "forecast_bias", [Forecast bias],
+    "retention_rate", [Customer retention quarter over quarter],
+    "repeat_purchase_rate", [Repeat purchase rate],
+    "revenue_at_risk_share", [Revenue at risk RFM At risk],
+    "nps", [Net Promoter Score simulated survey],
+    "dq_completeness", [Completeness],
+    "dq_uniqueness", [Uniqueness],
+    "dq_validity", [Validity],
+    "dq_timeliness", [Timeliness]
+)

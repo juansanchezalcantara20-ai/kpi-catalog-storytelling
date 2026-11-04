@@ -536,8 +536,10 @@ kpis:
     name: Stockout rate (SKU-days)
     case: inventory
     question: How often is an item simply not available?
-    definition: SKU-days with zero on-hand units at end of day divided by all SKU-days.
-    formula: "count(on_hand_units <= 0) / count(sku_days)"
+    definition: >-
+      SKU-days of the active assortment with zero on-hand units at end of day,
+      divided by all active SKU-days. A SKU is active between its first and last demand.
+    formula: "count(active AND on_hand_units <= 0) / count(active sku_days)"
     unit: percent
     granularity: SKU x day; reported weekly by SKU class.
     direction: lower_is_better
@@ -545,22 +547,23 @@ kpis:
     thresholds: {green: 0.03, amber: 0.06}
     owner: Supply Planner
     source: Synthetic stock simulation on public demand
-    input: {table: inventory_daily, columns: [on_hand_units]}
+    input: {table: inventory_daily, columns: [on_hand_units, active]}
     how_to_read: >-
       Unweighted by volume, so it shows breadth: many small SKUs out of stock
       raise it even when fill rate stays high.
     misreadings:
       - End-of-day stock misses intraday stockouts; for fast movers it understates the problem.
-      - Including discontinued SKUs inflates it - filter to active assortment.
+      - Including discontinued or not-yet-launched SKUs inflates it - this definition counts the active assortment only.
     related: [fill_rate, days_of_cover]
     chart: {type: heatmap, why: "SKU x week grid reveals clusters of stockouts in time."}
     dax: |-
       DIVIDE (
-          CALCULATE ( COUNTROWS ( InventoryDaily ), InventoryDaily[on_hand_units] <= 0 ),
-          COUNTROWS ( InventoryDaily )
+          CALCULATE ( COUNTROWS ( InventoryDaily ), InventoryDaily[active] = TRUE (), InventoryDaily[on_hand_units] <= 0 ),
+          CALCULATE ( COUNTROWS ( InventoryDaily ), InventoryDaily[active] = TRUE () )
       )
     sql: |-
-      SELECT CAST(SUM(CASE WHEN on_hand_units <= 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) FROM inventory_daily
+      SELECT CAST(SUM(CASE WHEN on_hand_units <= 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+      FROM inventory_daily WHERE active = 1
 
   - id: obsolescence_share
     name: Obsolete stock share
