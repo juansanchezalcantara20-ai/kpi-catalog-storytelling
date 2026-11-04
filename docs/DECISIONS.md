@@ -39,3 +39,19 @@ decisions are appended at the end of each phase.
 | 25 | Stockout rate counts the **active assortment** only (between a SKU's first and last demand). | The first simulation showed 18% stockouts, almost all of them SKUs not yet launched or already discontinued. The catalog definition, DAX, SQL and the hand example were updated together. |
 | 26 | Data quality is measured on the **landing** tables (before cleaning); cleaning rules are code (`clean*` functions). | Measuring after cleaning would always show 100%; the gap between landing and clean data is the DQ story. |
 | 27 | Processed tables are Parquet (`pyarrow`). | Keeps dtypes (timestamps, booleans) between pipeline and site without re-parsing. |
+
+## Phase 3 · Site and cases 1-2
+
+| # | Decision | Why |
+|---|----------|-----|
+| 28 | **MkDocs Material** instead of Quarto. | Pure Python (`pip install`), no extra toolchain in CI; Material gives navigation, admonitions and tables out of the box. |
+| 29 | Pages are **generated Markdown** (`src/kpistory/site`) with Plotly charts inlined as HTML; generated pages are not committed. | Every number in a title or sentence comes from the data at build time, so the text cannot drift from the charts, and it stays correct if the build uses the real UCI files instead of plan B. |
+| 30 | **plotly.js is served from the site itself** (copied from the Python package) and loaded in `<head>`. | No CDN dependency (the build sandbox could not reach CDNs either), and inline chart scripts need Plotly defined before they run. |
+| 31 | Chart titles are **conclusions computed from the data**; the subtitle says what is plotted. Long titles are wrapped automatically. | The style rule "title = conclusion" only survives data changes if the conclusion is computed, not typed. |
+| 32 | One highlight colour (blue `#2a78d6`) + context grey; orange/aqua only when a comparison needs a second/third series; status colours (`#0ca30c` / `#fab219` / `#d03b3b`) reserved for good/watch/act and always paired with ✓ / ! / ✕ and a word. | Colour-blind-safe order validated by the palette tool used to design it; status must never be colour alone. |
+| 33 | Bars start at zero, **except** the availability-by-machine chart, which says so in its subtitle and in a note. | All machines sit between 75% and 100%; the decision is the gap to a 97% target. Breaking the rule openly is better than hiding it (the anti-pattern gallery shows the dishonest version). |
+| 34 | SLA trend and similar line charts may zoom the y-axis, stating the start in the subtitle. | Lines encode change by slope, not length; zooming is legitimate if declared. |
+| 35 | Each low-availability machine is classified as **"fails too often" vs "too slow to repair"** by comparing its MTBF and MTTR gaps to the fleet medians. | A first draft labelled all low-availability machines as reliability problems; the scatter showed two of them were repair-time problems. The text is now computed per machine. |
+| 36 | Quadrant lines in the MTBF/MTTR scatter use **fleet medians, not targets**. | With an illustrative 150 h MTBF target every machine would sit in the same quadrant; medians answer "which machines are different?". |
+| 37 | Every chart has a "Show the data" table where the data is small enough. | Accessibility (a table view) and auditability for a reviewer. |
+| 38 | `make all` runs lint → tests → validate → data → pages → Power BI layer → `mkdocs build --strict`; the Pages workflow runs exactly that with `SOURCE=auto` and caches `data/raw`. | One command reproduces everything, locally and in CI. |

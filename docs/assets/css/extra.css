@@ -1,0 +1,72 @@
+:root {
+  --md-primary-fg-color: #1c5cab;
+  --md-accent-fg-color: #2a78d6;
+  --kpi-good: #0ca30c;
+  --kpi-watch: #fab219;
+  --kpi-act: #d03b3b;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --hairline: #e1e0d9;
+  --surface: #fcfcfb;
+}
+.md-typeset .story-question {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--ink);
+  border-left: 4px solid var(--md-accent-fg-color);
+  padding: 0.4rem 0 0.4rem 0.9rem;
+  margin: 0.6rem 0 1rem;
+}
+.md-typeset .kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0 1.5rem;
+}
+.md-typeset a.kpi-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--hairline);
+  border-left: 5px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+.md-typeset a.kpi-tile:hover { box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08); }
+.md-typeset .kpi-name { font-size: 0.72rem; color: var(--ink-2); line-height: 1.25; }
+.md-typeset .kpi-value { font-size: 1.55rem; font-weight: 650; line-height: 1.2; }
+.md-typeset .kpi-status { font-size: 0.7rem; color: var(--ink-2); }
+.md-typeset .kpi-status .icon { font-weight: 700; }
+.md-typeset .kpi-context { font-size: 0.66rem; color: #898781; }
+.md-typeset .status-green { border-left-color: var(--kpi-good) !important; }
+.md-typeset .status-green .icon { color: #006300; }
+.md-typeset .status-amber { border-left-color: var(--kpi-watch) !important; }
+.md-typeset .status-amber .icon { color: #8a5a00; }
+.md-typeset .status-red { border-left-color: var(--kpi-act) !important; }
+.md-typeset .status-red .icon { color: var(--kpi-act); }
+.md-typeset .chart {
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 0.3rem;
+  margin: 1rem 0 0.3rem;
+  background: var(--surface);
+  overflow: hidden;
+}
+.md-typeset .chart-caption { font-size: 0.72rem; color: var(--ink-2); margin-top: 0.2rem; }
+.md-typeset details.data { font-size: 0.72rem; margin: 0.2rem 0 1.4rem; }
+.md-typeset details.data summary { cursor: pointer; color: var(--ink-2); }
+.md-typeset table.data-table { font-size: 0.7rem; }
+.md-typeset .pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.md-typeset .pair .bad .chart { border-top: 4px solid var(--kpi-act); }
+.md-typeset .pair .good .chart { border-top: 4px solid var(--kpi-good); }
+.md-typeset .verdict { font-weight: 650; margin: 0.4rem 0 0; }
+@media (max-width: 900px) {
+  .md-typeset .pair { grid-template-columns: 1fr; }
+}

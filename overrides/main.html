@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block extrahead %}
+  {# Plotly must be loaded before the inline chart scripts run, so it goes in <head>. #}
+  <script src="{{ 'assets/js/plotly.min.js' | url }}"></script>
+{% endblock %}

@@ -34,7 +34,11 @@ def cmd_site(_: argparse.Namespace) -> int:
 
 
 def cmd_powerbi(_: argparse.Namespace) -> int:
-    from .powerbi.export import export
+    try:
+        from .powerbi.export import export
+    except ModuleNotFoundError:
+        print("Power BI layer not available in this version.")
+        return 0
 
     export()
     return 0
