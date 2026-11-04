@@ -49,16 +49,17 @@ START, END = pd.Timestamp("2009-12-01"), pd.Timestamp("2011-12-09")
 
 # --------------------------------------------------------------------------- real
 def load_real() -> pd.DataFrame:
+    import io
     import zipfile
 
     path = fetch(URL, "online_retail_ii.zip", timeout=300)
     with zipfile.ZipFile(path) as zf:
         name = next(n for n in zf.namelist() if n.lower().endswith((".xlsx", ".csv")))
-        with zf.open(name) as fh:
-            if name.lower().endswith(".csv"):
-                return parse_retail_frames([pd.read_csv(fh, encoding="latin-1")])
-            sheets = pd.read_excel(fh, sheet_name=None, dtype={"Invoice": str, "StockCode": str})
-            return parse_retail_frames(list(sheets.values()))
+        buffer = io.BytesIO(zf.read(name))  # openpyxl needs a fully seekable file
+    if name.lower().endswith(".csv"):
+        return parse_retail_frames([pd.read_csv(buffer, encoding="latin-1")])
+    sheets = pd.read_excel(buffer, sheet_name=None, dtype={"Invoice": str, "StockCode": str})
+    return parse_retail_frames(list(sheets.values()))
 
 
 def parse_retail_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
