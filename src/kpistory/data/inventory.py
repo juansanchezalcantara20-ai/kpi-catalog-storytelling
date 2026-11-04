@@ -82,7 +82,7 @@ def simulate(sales: pd.DataFrame, seed: int = SEED) -> dict[str, pd.DataFrame]:
         pipeline = [(d, q) for d, q in pipeline if d != i]
         for q in arriving:
             on_hand += q
-        if day.dayofweek == 0:  # weekly review on Mondays
+        if day.day_of_week == 0:  # weekly review on Mondays
             week_fc = fc_weekly.loc[fc_weekly.index >= day].iloc[0].to_numpy()
             position = on_hand + sum((q for _, q in pipeline), np.zeros(len(skus)))
             qty = np.maximum(0, np.round(week_fc * ORDER_UP_TO_WEEKS - position))

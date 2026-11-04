@@ -315,7 +315,7 @@ def _date_table(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
             "Year-Quarter": days.year.astype(str) + "-Q" + days.quarter.astype(str),
             "Month": days.month,
             "Year-Month": days.strftime("%Y-%m"),
-            "Week start": (days - pd.to_timedelta(days.dayofweek, unit="D")).date,
+            "Week start": (days - pd.to_timedelta(days.day_of_week, unit="D")).date,
         }
     )
 
