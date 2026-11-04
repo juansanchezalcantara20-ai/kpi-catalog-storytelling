@@ -55,3 +55,17 @@ decisions are appended at the end of each phase.
 | 36 | Quadrant lines in the MTBF/MTTR scatter use **fleet medians, not targets**. | With an illustrative 150 h MTBF target every machine would sit in the same quadrant; medians answer "which machines are different?". |
 | 37 | Every chart has a "Show the data" table where the data is small enough. | Accessibility (a table view) and auditability for a reviewer. |
 | 38 | `make all` runs lint → tests → validate → data → pages → Power BI layer → `mkdocs build --strict`; the Pages workflow runs exactly that with `SOURCE=auto` and caches `data/raw`. | One command reproduces everything, locally and in CI. |
+
+## Phase 4 · Cases 3, 4 and 5
+
+| # | Decision | Why |
+|---|----------|-----|
+| 39 | Case KPIs use the **last 12 months** of the log; snapshot KPIs (cover, obsolescence, RFM) use the last date. | A year is the shortest window that contains one full gift season. |
+| 40 | Forecast evaluation keeps **complete weeks and complete months only**. | The log ends on a Friday in December; the partial month first showed a fake +80% over-forecast. |
+| 41 | The MAPE vs WAPE chart groups SKU-weeks **by the size of the actual week**, not by ABC class. | A first version grouped by ABC class and its title ("slow movers inflate MAPE") was contradicted by the bars: A-class SKUs had the highest MAPE because their small weeks are intermittent. The mechanism is the size of the week, so that is what the chart shows. |
+| 42 | Titles that make a causal-sounding claim are **conditional on the data** (e.g. stockouts vs under-forecast months: the title and the decision change if fewer than half of stockout days fall in under-forecast months). | A computed number inside a hard-coded claim can still lie; the claim itself has to be computed. |
+| 43 | OTIF failures are decomposed into **short / late / both**, with the owner of each. | Fill rate and OTIF disagree by design; the decomposition turns the gap into two action owners. |
+| 44 | Retention uses **complete quarters only**; the last partial quarter is dropped. | A quarter with three weeks of data looks like a churn crisis. |
+| 45 | The NPS composition is the site's **only part-to-whole chart: a 100% bar with exactly three parts**. NPS by segment is shown with 95% margins of error. | Within the "no pies with more than three parts" rule, and NPS without n and error bars invites over-reading. |
+| 46 | The NPS-segment relationship is **declared an assumption** on the page. | Scores were generated per segment, so presenting the link as a finding would be circular. |
+| 47 | The data-quality grid colours cells by **status against the catalog target**, never by raw value, and shows "not measurable" instead of a value where no load timestamp exists. | A 99.2% can be a problem (uniqueness) while 96% is fine elsewhere; and an invented 100% would hide a missing audit column. |

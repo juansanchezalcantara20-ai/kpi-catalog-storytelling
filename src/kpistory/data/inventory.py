@@ -47,7 +47,10 @@ def weekly_forecast(daily_demand: pd.DataFrame) -> pd.DataFrame:
     weekly["forecast_units"] = weekly.groupby("sku")["actual_units"].transform(
         lambda s: s.shift(1).rolling(MA_WEEKS, min_periods=4).mean()
     )
-    return weekly.dropna(subset=["forecast_units"]).reset_index(drop=True)
+    # Only complete weeks: a partial last week would look like a demand collapse.
+    first, last = daily_demand["date"].min(), daily_demand["date"].max()
+    complete = (weekly["week"] >= first) & (weekly["week"] + pd.Timedelta(days=6) <= last)
+    return weekly[complete].dropna(subset=["forecast_units"]).reset_index(drop=True)
 
 
 def simulate(sales: pd.DataFrame, seed: int = SEED) -> dict[str, pd.DataFrame]:
