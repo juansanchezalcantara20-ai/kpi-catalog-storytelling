@@ -7,14 +7,14 @@ decisions are appended at the end of each phase.
 
 | # | Decision | Why |
 |---|----------|-----|
-| 1 | **`kpis/catalog.yaml` is the single source of truth**, validated by a JSON Schema plus semantic checks in `kpistory.catalog`. | A schema catches typos and missing fields; semantic checks catch what a schema cannot (thresholds contradicting the direction, related KPIs that do not exist, params referenced in DAX that are not declared). |
+| 1 | **`kpis/catalog.yaml` is the single source of truth**, validated by a JSON Schema plus semantic checks in `kpistory.catalog`. | A schema catches typos and missing fields; semantic checks catch what a schema cannot (thresholds contradicting the direction, related KPIs that do not exist, params referenced in SQL that are not declared). |
 | 2 | **One Python function per KPI**, registered with `@kpi("<id>")`. Validation fails if a catalog KPI has no function or a function has no catalog entry. | "Nothing is defined twice" has to be enforced by code, not by discipline. |
-| 3 | Functions never contain targets, thresholds or parameters. Parameters (e.g. the 7-day backlog limit) live in `params:` and are substituted into DAX and SQL as `${name}`. | Changing a business rule is a one-line edit in the catalog that propagates to Python, SQL and Power BI. |
-| 4 | DAX and SQL are stored next to the definition in the catalog rather than generated from a formula mini-language. | A DSL expressive enough for OTIF, retention and RFM would be harder to read than the DAX itself. Keeping the three implementations side by side makes review easy; tests verify Python and SQL agree on the hand examples. DAX cannot be executed here (see Phase 6). |
-| 5 | **Ratios are stored as fractions**, displayed as percentages. | Avoids the classic "is 0.9 ninety percent or 0.9 percent?" bug between layers; Power BI format strings do the display. |
+| 3 | Functions never contain targets, thresholds or parameters. Parameters (e.g. the 7-day backlog limit) live in `params:` and are substituted into SQL as `${name}`. | Changing a business rule is a one-line edit in the catalog that propagates to Python and SQL. |
+| 4 | Reference SQL is stored next to the definition in the catalog rather than generated from a formula mini-language. | A DSL expressive enough for OTIF, retention and RFM would be harder to read than the SQL itself. Tests verify that Python and SQL agree on the hand examples. |
+| 5 | **Ratios are stored as fractions**, displayed as percentages. | Avoids the classic \"is 0.9 ninety percent or 0.9 percent?\" bug between layers; formatting happens only at display time. |
 | 6 | Three directions: `higher_is_better`, `lower_is_better`, **`target_range`**. | Days of cover and forecast bias are bad in both directions; forcing them into "higher/lower is better" teaches the wrong reading. |
 | 7 | Traffic-light boundaries are inclusive on the green side (SLA ≥ 90% is green). | Matches how targets are usually worded ("at least 90%") and is pinned by a test. |
-| 8 | Empty denominators return NaN (shown as "n/a"), never 0. | Same semantics as DAX `DIVIDE`; a 0% SLA in a week with no tickets is a false alarm. |
+| 8 | Empty denominators return NaN (shown as "n/a"), never 0. | Same semantics as SQL `NULLIF` division; a 0% SLA in a week with no tickets is a false alarm. |
 | 9 | **MTTR is kept as a mean** (not a median). The median and the tail are shown next to it. | The identity Availability = MTBF / (MTBF + MTTR) only holds with means. The misreading is documented instead of redefining the KPI. |
 | 10 | Resolution and first-response time **are medians** by definition. | They are customer-experience KPIs with heavy right tails; no identity depends on them, so the robust statistic wins. |
 | 11 | Every KPI has a **hand-calculated example** (`tests/hand_examples.py`) with the expected value and the arithmetic written out. The same examples run against the reference SQL on SQLite. | Hand examples are the cheapest proof that a formula means what the definition says; running them through two implementations catches definition drift. |
@@ -36,7 +36,7 @@ decisions are appended at the end of each phase.
 | 22 | AI4I records are mapped to 10 machines × 1,000 contiguous 4-hour runs. | AI4I has no machine id or timestamp. Contiguous blocks keep the tool-wear sequence intact; the assumption is stated on the page. |
 | 23 | Work orders, stock, forecast, deliveries and the NPS survey are simulated with **explicit, documented policies** (see `cases/*/README.md`). | The public data covers demand and process; the operational half is simulated transparently instead of being presented as observed. |
 | 24 | The forecast is an **8-week moving average** on purpose. | It is the most common baseline in practice, and its lag around the Q4 season produces the bias / stockout / excess pattern the case explains. |
-| 25 | Stockout rate counts the **active assortment** only (between a SKU's first and last demand). | The first simulation showed 18% stockouts, almost all of them SKUs not yet launched or already discontinued. The catalog definition, DAX, SQL and the hand example were updated together. |
+| 25 | Stockout rate counts the **active assortment** only (between a SKU's first and last demand). | The first simulation showed 18% stockouts, almost all of them SKUs not yet launched or already discontinued. The catalog definition, SQL and the hand example were updated together. |
 | 26 | Data quality is measured on the **landing** tables (before cleaning); cleaning rules are code (`clean*` functions). | Measuring after cleaning would always show 100%; the gap between landing and clean data is the DQ story. |
 | 27 | Processed tables are Parquet (`pyarrow`). | Keeps dtypes (timestamps, booleans) between pipeline and site without re-parsing. |
 
@@ -54,7 +54,7 @@ decisions are appended at the end of each phase.
 | 35 | Each low-availability machine is classified as **"fails too often" vs "too slow to repair"** by comparing its MTBF and MTTR gaps to the fleet medians. | A first draft labelled all low-availability machines as reliability problems; the scatter showed two of them were repair-time problems. The text is now computed per machine. |
 | 36 | Quadrant lines in the MTBF/MTTR scatter use **fleet medians, not targets**. | With an illustrative 150 h MTBF target every machine would sit in the same quadrant; medians answer "which machines are different?". |
 | 37 | Every chart has a "Show the data" table where the data is small enough. | Accessibility (a table view) and auditability for a reviewer. |
-| 38 | `make all` runs lint → tests → validate → data → pages → Power BI layer → `mkdocs build --strict`; the Pages workflow runs exactly that with `SOURCE=auto` and caches `data/raw`. | One command reproduces everything, locally and in CI. |
+| 38 | `make all` runs lint → tests → validate → data → story pages → dashboard → `mkdocs build --strict`; the Pages workflow runs exactly that with `SOURCE=auto` and caches `data/raw`. | One command reproduces everything, locally and in CI. |
 
 ## Phase 4 · Cases 3, 4 and 5
 
@@ -80,17 +80,17 @@ decisions are appended at the end of each phase.
 | 51 | The "too many series" message is chosen by the data (the top-10 SKU whose demand dropped most) with a conditional title. | A first draft claimed a SKU was "seasonal" with 29% of its year in Q4 - barely above the 25% of a flat year. The claim was replaced by one the data supports. |
 | 52 | CI also runs `make all SOURCE=synthetic` on every push. | The site generator is code too; a broken page should fail the build, not the deploy. |
 
-## Phase 6 · Power BI layer
+## Phase 6 · Interactive KPI dashboard (second presentation layer)
 
 | # | Decision | Why |
 |---|----------|-----|
-| 53 | **No PBIP/TMDL project.** The repository ships `powerbi/measures.dax`, `powerbi/MODEL.md` and `powerbi/BUILD_CHECKLIST.md` instead. | Power BI Desktop cannot run in the build environment, so a generated TMDL project could not be opened to prove it valid. Shipping an unverified project as if it worked would be dishonest; the fallback is what was asked for in that case. |
-| 54 | `measures.dax` is written in **DAX query view format** (`DEFINE MEASURE … EVALUATE ROW(…)`). | Desktop's DAX query view can add every measure to the model in one step, and the `EVALUATE` returns all KPIs in one row for reconciliation. |
-| 55 | `expected_values.csv` (Python results on the same data) is exported next to the model tables, with the filter context needed where the KPI is time-relative. | Turns "trust me, the DAX matches" into a five-minute check in Desktop. |
-| 56 | Rule-dependent flags (`within_sla`, `pm_on_time`, `active`) are **computed in Python and exported as columns**. | The rule is written once with its catalog parameter; DAX only counts the flag. |
-| 57 | Measure names are the catalog names stripped of brackets and symbols; each measure lives in its KPI's input table. | Avoids escaping problems in DAX object names and keeps measures next to the facts they count. |
-| 58 | The committed Power BI files are **tested to be identical to what the catalog generates**; data CSVs are not committed. | Guarantees the DAX in the repository is the DAX in the catalog. CSVs are reproducible with `make data powerbi` (and on a normal network will contain the real UCI data). |
-| 59 | `powerbi/theme.json` is generated from the same palette module as the website. | Two tools, one visual language. |
+| 53 | The second presentation layer is a **self-contained interactive HTML dashboard** (`kpistory dashboard` → `/dashboard/` on GitHub Pages), next to the story site. | Everything runs in the cloud and is viewable in any browser. The story site explains *why*; the dashboard is the weekly monitoring view of the same KPIs. |
+| 54 | Dashboard data is a JSON payload built by the **same engine** (headline values, trends, statuses) plus the catalog texts (question, target, how to read, misreadings, owner). | Nothing is computed twice: a card and its story page always show the same number. |
+| 55 | Layout: domain and status filters in one row, KPI cards (value, ✓ ! ✕ status with a word, target, sparkline), a detail panel with the trend against the target line or band. | Standard monitoring pattern: scan for red, click, understand. Status never relies on colour alone. |
+| 56 | Trends use complete periods only; breakdown views (by queue, SKU group, dataset, segment) are used where a KPI is a snapshot. | Same rule as the story pages - partial periods create fake drops. |
+| 57 | Filter state lives in the URL hash. | A filtered view can be shared as a link; no storage needed. |
+| 58 | Plotly is loaded from the site's own assets; no external CDN. | One self-hosted dependency for both layers. |
+| 59 | The dashboard uses the same palette module as the story site. | Two layers, one visual language. |
 
 ## Phase 7 · README and release
 
@@ -98,7 +98,7 @@ decisions are appended at the end of each phase.
 |---|----------|-----|
 | 60 | README screenshots are cropped elements of the real built site (Playwright, 2× scale), committed in `docs/img/`. | A recruiter skimming GitHub sees the work without opening the site; crops of real pages cannot drift into mock-ups. |
 | 61 | The README maps each requirement of the target job descriptions to a concrete file or page ("What this demonstrates"). | Five-minute review: claims are verifiable by clicking. |
-| 62 | "How this was built" and "Scope & limitations" are explicit about Claude Code, synthetic data, illustrative targets and the unexecuted Power BI layer. | Honesty is part of the method being demonstrated. |
+| 62 | "How this was built" and "Scope & limitations" are explicit about Claude Code, synthetic data and illustrative targets. | Honesty is part of the method being demonstrated. |
 | 63 | The repository and Pages URLs assume the name `kpi-catalog-storytelling` under `juansanchezalcantara20-ai`. | The build session had no repository attached; if the name differs, update `mkdocs.yml` (`repo_url`) and the README links. |
 
 ## Phase 8 · Cloud-only development
@@ -106,5 +106,5 @@ decisions are appended at the end of each phase.
 | # | Decision | Why |
 |---|----------|-----|
 | 64 | **All development and builds run in the cloud**: GitHub Actions for CI and publishing, GitHub Codespaces (`.devcontainer/`) for editing and previewing. | Requirement: no local setup. The devcontainer installs the package and runs `make all`, so a Codespace is ready to work in minutes. |
-| 65 | The Pages workflow **publishes the Power BI model tables** (`/data/powerbi/*.csv` + `manifest.json`) and uploads a `powerbi-layer` artifact. | Power BI Desktop loads them with *Get data → Web*; no Python on the PC, and the tables come from the same cloud build (with the real UCI data when reachable) as the website. |
-| 66 | Power BI Desktop remains the only local step. | It is a Windows desktop application; the cloud equivalents (Power BI Service) cannot create measures from a DAX script without a desktop-authored model. |
+| 65 | The Pages workflow publishes the story site and the dashboard together on every push to `main`. | One build, one URL, no local step. |
+| 66 | Real-data errors after a successful download fall back to plan B in `auto` mode, with the reason written to the manifest. | The first cloud build downloaded the real Online Retail II file and then failed writing it (numeric product descriptions); the site must still publish, and say why. Text columns are now normalised before writing. |

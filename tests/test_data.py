@@ -58,7 +58,9 @@ def test_retail_parser_accepts_the_real_schema():
         {
             "Invoice": [489434, "C489449"],
             "StockCode": [85048, "22087"],
-            "Description": ["15CM CHRISTMAS GLASS BALL 20 LIGHTS", "PAPER BUNTING WHITE LACE"],
+            "Description": pd.Series(
+                ["15CM CHRISTMAS GLASS BALL 20 LIGHTS", 21], dtype=object
+            ),  # real file has numbers
             "Quantity": [12, -12],
             "InvoiceDate": ["2009-12-01 07:45:00", "2009-12-01 10:33:00"],
             "Price": [6.95, 2.95],
@@ -71,6 +73,13 @@ def test_retail_parser_accepts_the_real_schema():
     clean = retail.clean(df)
     assert len(clean) == 1  # cancellation and exact duplicate removed
     assert clean["revenue"].iloc[0] == pytest.approx(83.4)
+
+
+def test_mixed_type_text_columns_can_be_written_to_parquet(tmp_path):
+    df = pd.DataFrame({"Description": ["MUG", 21, None], "n": [1, 2, 3]})
+    pipeline._text_safe(df).to_parquet(tmp_path / "x.parquet")
+    back = pd.read_parquet(tmp_path / "x.parquet")
+    assert back["Description"].tolist()[:2] == ["MUG", "21"]
 
 
 def test_auto_source_falls_back_to_plan_b():

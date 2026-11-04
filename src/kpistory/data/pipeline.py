@@ -116,9 +116,34 @@ def build(source: str = "auto") -> tuple[dict[str, pd.DataFrame], dict]:
     return {**tables, **{f"landing_{k}": v for k, v in landing.items()}}, manifest
 
 
+def _text_safe(df: pd.DataFrame) -> pd.DataFrame:
+    """Object columns that mix types (e.g. numbers typed into a text field) become strings for Parquet."""
+    out = df.copy()
+    for col in out.columns[out.dtypes.eq(object)]:
+        kinds = out[col].dropna().map(type).unique()
+        if len(kinds) > 1:
+            out[col] = out[col].map(lambda v: None if pd.isna(v) else str(v)).astype("string")
+    return out
+
+
 def run(source: str = "auto") -> dict:
     t0 = time.time()
-    tables, manifest = build(source)
+    try:
+        tables, manifest = build(source)
+        tables = {name: _text_safe(df) for name, df in tables.items()}
+    except Exception as exc:
+        if source != "auto":
+            raise
+        # Real data downloaded but broke a later step: publish plan B rather than nothing, and say why.
+        print(
+            f"  real-data build failed ({type(exc).__name__}: {str(exc)[:200]}); rebuilding with plan B"
+        )
+        tables, manifest = build("synthetic")
+        manifest["source_mode"] = "auto (fell back to synthetic after a real-data error)"
+        for key in ("process_data", "transactions"):
+            manifest[key]["note"] = (
+                f"plan B - real data failed downstream: {type(exc).__name__}: {str(exc)[:160]}"
+            )
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     for name, df in tables.items():
         df.to_parquet(PROCESSED_DIR / f"{name}.parquet", index=False)

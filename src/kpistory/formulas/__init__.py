@@ -30,7 +30,7 @@ def kpi(kpi_id: str) -> Callable[[KpiFunc], KpiFunc]:
 
 
 def safe_ratio(numerator: float, denominator: float) -> float:
-    """numerator / denominator, NaN when the denominator is zero (like DAX DIVIDE)."""
+    """numerator / denominator, NaN when the denominator is zero (a zero denominator means 'undefined', not 0)."""
     return float(numerator) / float(denominator) if denominator else float("nan")
 
 

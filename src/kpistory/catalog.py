@@ -5,7 +5,7 @@ Validation happens in two layers:
 1. Structural: the JSON Schema in kpis/catalog.schema.json.
 2. Semantic: rules a schema cannot express (unique ids, related ids exist,
    thresholds consistent with the direction, every KPI has exactly one
-   Python implementation, params referenced in DAX/SQL exist, ...).
+   Python implementation, params referenced in SQL exist, ...).
 """
 
 from __future__ import annotations
@@ -50,19 +50,14 @@ class KPI:
     misreadings: list[str]
     related: list[str]
     chart: dict[str, str]
-    dax: str
     sql: str | None = None
     params: dict[str, Any] = field(default_factory=dict)
 
     def render(self, template: str | None) -> str | None:
-        """Substitute ${param} references in a DAX/SQL template."""
+        """Substitute ${param} references in a SQL template."""
         if template is None:
             return None
         return Template(template).substitute(self.params)
-
-    @property
-    def dax_expression(self) -> str:
-        return self.render(self.dax)  # type: ignore[return-value]
 
     @property
     def sql_query(self) -> str | None:
@@ -138,7 +133,7 @@ def _semantic_errors(raw: dict[str, Any]) -> list[str]:
                 if not 0 <= value <= 1:
                     errors.append(f"{kid}: percent {name} must be a fraction in [0, 1]")
         params = k.get("params", {})
-        for text_field in ("dax", "sql"):
+        for text_field in ("sql",):
             for ref in PARAM_REF.findall(k.get(text_field) or ""):
                 if ref not in params:
                     errors.append(f"{kid}: {text_field} references unknown param '{ref}'")

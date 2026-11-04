@@ -29,7 +29,7 @@
       "additionalProperties": false,
       "required": ["id", "name", "case", "question", "definition", "formula", "unit", "granularity",
                    "direction", "target", "thresholds", "owner", "source", "input", "how_to_read",
-                   "misreadings", "related", "chart", "dax"],
+                   "misreadings", "related", "chart"],
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
         "name": {"type": "string", "minLength": 3},
@@ -74,7 +74,6 @@
             "why": {"$ref": "#/$defs/text"}
           }
         },
-        "dax": {"type": "string", "minLength": 5},
         "sql": {"type": "string", "minLength": 5}
       }
     },

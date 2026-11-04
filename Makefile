@@ -2,7 +2,7 @@
 SOURCE ?= auto
 PY ?= python
 
-.PHONY: install lint test validate data site powerbi docs serve all clean
+.PHONY: install lint test validate data site dashboard docs serve all clean
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -23,8 +23,8 @@ data:
 site:
 	$(PY) -m kpistory site
 
-powerbi:
-	$(PY) -m kpistory powerbi
+dashboard:
+	$(PY) -m kpistory dashboard
 
 docs: site
 	mkdocs build --strict
@@ -32,8 +32,8 @@ docs: site
 serve: site
 	mkdocs serve
 
-all: lint test validate data site powerbi
+all: lint test validate data site dashboard
 	mkdocs build --strict
 
 clean:
-	rm -rf site data/processed docs/cases docs/catalog docs/antipatterns.md docs/data-sources.md
+	rm -rf site data/processed docs/cases docs/catalog docs/antipatterns.md docs/data-sources.md docs/dashboard

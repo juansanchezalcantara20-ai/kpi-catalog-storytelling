@@ -70,6 +70,9 @@ def parse_retail_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
     df = df[COLUMNS].copy()
     df["Invoice"] = df["Invoice"].astype(str)
     df["StockCode"] = df["StockCode"].astype(str)
+    # The real workbook stores some descriptions as numbers; keep text as text, missing as missing.
+    for col in ("Description", "Country"):
+        df[col] = df[col].map(lambda v: None if pd.isna(v) else str(v)).astype("string")
     df["InvoiceDate"] = pd.to_datetime(df["InvoiceDate"])
     df["Customer ID"] = pd.to_numeric(df["Customer ID"], errors="coerce")
     return df
@@ -103,7 +106,7 @@ def generate(seed: int = SEED, n_customers: int = 4200, n_skus: int = 900) -> pd
         p=[0.89, 0.025, 0.025, 0.02, 0.015, 0.0125, 0.0125],
         size=n_customers,
     )
-    season = 1 + 0.9 * np.exp(-(((days.dayofyear.to_numpy() - 320) / 28.0) ** 2))  # Q4 peak
+    season = 1 + 0.9 * np.exp(-(((days.day_of_year.to_numpy() - 320) / 28.0) ** 2))  # Q4 peak
     rows = []
     inv_no = 489434
     for c in range(n_customers):

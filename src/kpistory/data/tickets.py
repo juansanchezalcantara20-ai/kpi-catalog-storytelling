@@ -44,7 +44,7 @@ def generate(seed: int = SEED) -> pd.DataFrame:
     for queue, (base, service_h) in QUEUES.items():
         pending: list[dict] = []
         for day in days:
-            weekend = day.dayofweek >= 5
+            weekend = day.day_of_week >= 5
             surge = queue == "Field Support" and day >= ROLLOUT
             lam = base * (0.3 if weekend else 1.0) * (1.6 if surge else 1.0)
             for created in sorted(

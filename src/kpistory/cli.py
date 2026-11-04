@@ -33,19 +33,15 @@ def cmd_site(_: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_powerbi(_: argparse.Namespace) -> int:
-    try:
-        from .powerbi.export import export
-    except ModuleNotFoundError:
-        print("Power BI layer not available in this version.")
-        return 0
+def cmd_dashboard(_: argparse.Namespace) -> int:
+    from .dashboard import build
 
-    export()
+    build()
     return 0
 
 
 def cmd_all(args: argparse.Namespace) -> int:
-    for step in (cmd_validate, cmd_data, cmd_site, cmd_powerbi):
+    for step in (cmd_validate, cmd_data, cmd_site, cmd_dashboard):
         code = step(args)
         if code:
             return code
@@ -58,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("validate", help="validate kpis/catalog.yaml").set_defaults(func=cmd_validate)
     for name, func, text in (
         ("data", cmd_data, "download (or synthesise) and clean every dataset"),
-        ("all", cmd_all, "validate + data + site pages + Power BI layer"),
+        ("all", cmd_all, "validate + data + story site pages + dashboard"),
     ):
         p = sub.add_parser(name, help=text)
         p.add_argument(
@@ -69,8 +65,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         p.set_defaults(func=func)
     sub.add_parser("site", help="generate the MkDocs pages and charts").set_defaults(func=cmd_site)
-    sub.add_parser("powerbi", help="generate the Power BI layer from the catalog").set_defaults(
-        func=cmd_powerbi
+    sub.add_parser("dashboard", help="generate the interactive KPI dashboard").set_defaults(
+        func=cmd_dashboard
     )
     args = parser.parse_args(argv)
     return args.func(args)
