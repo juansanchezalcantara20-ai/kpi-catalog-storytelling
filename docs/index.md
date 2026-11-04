@@ -2,7 +2,7 @@
 
 **The theory of a KPI does not depend on the tool.** Each KPI here is *defined once*
 in a YAML catalog, *calculated once* by a tested Python engine, and *presented in two tools*:
-this website and a Power BI semantic layer generated from the same catalog.
+this story website and an [interactive KPI dashboard](dashboard/index.html), both generated from the same catalog.
 
 <div class="grid cards" markdown>
 
@@ -10,8 +10,8 @@ this website and a Power BI semantic layer generated from the same catalog.
   customers and data quality, each told as *context → question → KPI → finding → decision → how we keep measuring*.
 - **[Anti-pattern gallery](antipatterns.md)** - the same data shown wrong and right, side by side.
 - **[KPI catalog](catalog/index.md)** - definition, formula, target, owner, how to read it,
-  common misreadings, DAX, SQL and a hand-calculated worked example for every KPI.
-- **[Power BI layer](powerbi.md)** - DAX measures and star schema generated from the same catalog.
+  common misreadings, SQL and a hand-calculated worked example for every KPI.
+- **[KPI dashboard](dashboard/index.html)** - all 28 KPIs as cards with status, trend and target; filters by domain and status.
 
 </div>
 

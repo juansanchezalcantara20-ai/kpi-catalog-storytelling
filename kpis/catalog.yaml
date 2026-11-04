@@ -10,7 +10,7 @@
 #       higher_is_better -> green if value >= green, amber if value >= amber, else red
 #       lower_is_better  -> green if value <= green, amber if value <= amber, else red
 #       target_range     -> green if inside [green], amber if inside [amber], else red
-#   * dax/sql may reference params as ${name}; they are substituted from `params`
+#   * sql may reference params as ${name}; they are substituted from `params`
 #     so a parameter (e.g. the 7-day backlog limit) is written only once.
 #   * Targets are illustrative: they are set for the synthetic / public data of this
 #     portfolio, not taken from any real organisation.
@@ -60,8 +60,6 @@ kpis:
       - Ignoring unanswered tickets - they are censored, not fast; track them as backlog.
     related: [resolution_time, sla_compliance]
     chart: {type: line, why: "Trend over weeks against the target line; the question is 'are we drifting?'."}
-    dax: |-
-      MEDIAN ( Tickets[first_response_hours] )
     sql: |-
       WITH x AS (
         SELECT first_response_hours AS v,
@@ -93,8 +91,6 @@ kpis:
       - Calendar hours vs business hours must be stated; mixing them across teams breaks comparisons.
     related: [first_response_time, sla_compliance, backlog_aged_share, reopen_rate]
     chart: {type: histogram, why: "The distribution (with median and P90 marked) shows the long tail that a single number hides."}
-    dax: |-
-      CALCULATE ( MEDIAN ( Tickets[resolution_hours] ), Tickets[status] = "resolved" )
     sql: |-
       WITH x AS (
         SELECT resolution_hours AS v,
@@ -128,11 +124,6 @@ kpis:
       - An overall figure averages P1 and P4; a 95% fleet number can coexist with a broken P1 promise.
     related: [resolution_time, backlog_aged_share]
     chart: {type: bullet, why: "Value against target and amber band in one glance; per queue as small bullets."}
-    dax: |-
-      DIVIDE (
-          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved", Tickets[within_sla] = TRUE () ),
-          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved" )
-      )
     sql: |-
       SELECT CAST(SUM(CASE WHEN resolution_hours <= sla_target_hours THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
       FROM tickets WHERE status = 'resolved'
@@ -161,11 +152,6 @@ kpis:
       - A snapshot on Monday morning and one on Friday evening are not comparable; fix the snapshot moment.
     related: [sla_compliance, resolution_time]
     chart: {type: bar, why: "Stacked age buckets per queue show where the old work sits."}
-    dax: |-
-      DIVIDE (
-          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "open", Tickets[age_days] > ${age_limit_days} ),
-          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "open" )
-      )
     sql: |-
       SELECT CAST(SUM(CASE WHEN age_days > ${age_limit_days} THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
       FROM tickets WHERE status = 'open'
@@ -194,11 +180,6 @@ kpis:
       - Pushing FCR by closing tickets prematurely shows up as a higher reopen rate - read them together.
     related: [reopen_rate, resolution_time]
     chart: {type: bar, why: "Comparison across channels, sorted, against the target line."}
-    dax: |-
-      DIVIDE (
-          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved", Tickets[contacts] = 1, Tickets[reopened] = FALSE () ),
-          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved" )
-      )
     sql: |-
       SELECT CAST(SUM(CASE WHEN contacts = 1 AND reopened = 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
       FROM tickets WHERE status = 'resolved'
@@ -224,11 +205,6 @@ kpis:
       - Reading it without a time window - reopenings arrive days later, so the last weeks always look better than they are.
     related: [first_contact_resolution, resolution_time]
     chart: {type: line, why: "Trend next to resolution time to expose a speed-vs-quality trade-off."}
-    dax: |-
-      DIVIDE (
-          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved", Tickets[reopened] = TRUE () ),
-          CALCULATE ( COUNTROWS ( Tickets ), Tickets[status] = "resolved" )
-      )
     sql: |-
       SELECT CAST(SUM(CASE WHEN reopened = 1 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
       FROM tickets WHERE status = 'resolved'
@@ -257,8 +233,6 @@ kpis:
       - With very few failures the value is volatile; report the failure count next to it.
     related: [mttr, availability, planned_work_share]
     chart: {type: bar, why: "Ranking assets: the lowest bars are the reliability backlog."}
-    dax: |-
-      DIVIDE ( SUM ( AssetPeriods[operating_hours] ), SUM ( AssetPeriods[failures] ) )
     sql: |-
       SELECT CAST(SUM(operating_hours) AS REAL) / SUM(failures) FROM asset_periods
 
@@ -285,8 +259,6 @@ kpis:
       - Repair time is not response time; mixing "time to arrive" and "time to fix" hides where the delay is.
     related: [mtbf, availability]
     chart: {type: boxplot, why: "Distribution per failure mode shows whether the mean is driven by a tail."}
-    dax: |-
-      CALCULATE ( AVERAGE ( WorkOrders[repair_hours] ), WorkOrders[wo_type] = "corrective" )
     sql: |-
       SELECT AVG(repair_hours) FROM work_orders WHERE wo_type = 'corrective'
 
@@ -314,11 +286,6 @@ kpis:
       - Excluding "minor stops" under a few minutes can hide a large share of lost time.
     related: [mtbf, mttr]
     chart: {type: line, why: "Monthly trend against target; one line per asset class at most."}
-    dax: |-
-      DIVIDE (
-          SUM ( AssetPeriods[scheduled_hours] ) - SUM ( AssetPeriods[unplanned_downtime_hours] ),
-          SUM ( AssetPeriods[scheduled_hours] )
-      )
     sql: |-
       SELECT CAST(SUM(scheduled_hours) - SUM(unplanned_downtime_hours) AS REAL) / SUM(scheduled_hours)
       FROM asset_periods
@@ -348,11 +315,6 @@ kpis:
       - Rescheduling the due date to the completion date makes compliance 100% by construction - audit date changes.
     related: [planned_work_share, mtbf]
     chart: {type: bar, why: "Per-asset comparison sorted ascending; the worst assets are the action list."}
-    dax: |-
-      DIVIDE (
-          CALCULATE ( COUNTROWS ( WorkOrders ), WorkOrders[wo_type] = "preventive", WorkOrders[pm_on_time] = TRUE () ),
-          CALCULATE ( COUNTROWS ( WorkOrders ), WorkOrders[wo_type] = "preventive" )
-      )
     sql: |-
       SELECT CAST(SUM(CASE WHEN completed_at IS NOT NULL
                             AND julianday(completed_at) <= julianday(due_date) + ${tolerance_days} THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
@@ -380,11 +342,6 @@ kpis:
       - Raising it by re-labelling emergency work as "planned" the same day; planned means scheduled ahead.
     related: [pm_compliance, mtbf]
     chart: {type: bar, why: "Stacked 100% bar per month (two parts only) or a line against target."}
-    dax: |-
-      DIVIDE (
-          CALCULATE ( SUM ( WorkOrders[labor_hours] ), WorkOrders[planned] = TRUE () ),
-          SUM ( WorkOrders[labor_hours] )
-      )
     sql: |-
       SELECT CAST(SUM(CASE WHEN planned = 1 THEN labor_hours ELSE 0 END) AS REAL) / SUM(labor_hours)
       FROM work_orders
@@ -412,8 +369,6 @@ kpis:
       - Lost sales that were never ordered (customer saw "out of stock") are invisible here.
     related: [otif, stockout_rate, days_of_cover]
     chart: {type: line, why: "Weekly trend against target with the stockout episodes annotated."}
-    dax: |-
-      DIVIDE ( SUM ( OrderLines[qty_shipped] ), SUM ( OrderLines[qty_ordered] ) )
     sql: |-
       SELECT CAST(SUM(qty_shipped) AS REAL) / SUM(qty_ordered) FROM order_lines
 
@@ -441,25 +396,6 @@ kpis:
       - Using the requested date for some customers and the confirmed date for others changes the KPI silently.
     related: [fill_rate, stockout_rate]
     chart: {type: bar, why: "Failure decomposition (late / short / both) as a sorted bar."}
-    dax: |-
-      VAR _orders = VALUES ( OrderLines[order_id] )
-      VAR _ok =
-          COUNTROWS (
-              FILTER (
-                  _orders,
-                  CALCULATE (
-                      ISEMPTY (
-                          FILTER (
-                              OrderLines,
-                              OrderLines[qty_shipped] < OrderLines[qty_ordered]
-                                  || ISBLANK ( OrderLines[delivered_date] )
-                                  || OrderLines[delivered_date] > OrderLines[promised_date]
-                          )
-                      )
-                  )
-              )
-          )
-      RETURN DIVIDE ( _ok, COUNTROWS ( _orders ) )
     sql: |-
       SELECT CAST(SUM(ok) AS REAL) / COUNT(*) FROM (
         SELECT order_id,
@@ -489,11 +425,6 @@ kpis:
       - Using year-end inventory instead of the average flatters companies that run down stock before closing.
     related: [days_of_cover, obsolescence_share, fill_rate]
     chart: {type: bar, why: "By SKU class (A/B/C) - the comparison that drives policy."}
-    dax: |-
-      VAR _days = DISTINCTCOUNT ( InventoryDaily[date] )
-      VAR _cogs = SUM ( InventoryDaily[cogs_value] )
-      VAR _avgInv = AVERAGEX ( VALUES ( InventoryDaily[date] ), CALCULATE ( SUM ( InventoryDaily[on_hand_value] ) ) )
-      RETURN DIVIDE ( _cogs * 365 / _days, _avgInv )
     sql: |-
       SELECT (SUM(cogs_value) * 365.0 / COUNT(DISTINCT date))
              / (SELECT AVG(v) FROM (SELECT SUM(on_hand_value) AS v FROM inventory_daily GROUP BY date))
@@ -522,11 +453,6 @@ kpis:
       - A fleet-level number nets SKUs with zero cover against SKUs with a year of cover.
     related: [inventory_turnover, stockout_rate, obsolescence_share]
     chart: {type: histogram, why: "Distribution of SKUs by cover with the green band shaded - shows both tails."}
-    dax: |-
-      VAR _last = MAX ( InventoryDaily[date] )
-      VAR _onHand = CALCULATE ( SUM ( InventoryDaily[on_hand_units] ), InventoryDaily[date] = _last )
-      VAR _avgDemand = DIVIDE ( SUM ( InventoryDaily[demand_units] ), DISTINCTCOUNT ( InventoryDaily[date] ) )
-      RETURN DIVIDE ( _onHand, _avgDemand )
     sql: |-
       SELECT (SELECT SUM(on_hand_units) FROM inventory_daily WHERE date = (SELECT MAX(date) FROM inventory_daily))
              / (SUM(demand_units) * 1.0 / COUNT(DISTINCT date))
@@ -556,11 +482,6 @@ kpis:
       - Including discontinued or not-yet-launched SKUs inflates it - this definition counts the active assortment only.
     related: [fill_rate, days_of_cover]
     chart: {type: heatmap, why: "SKU x week grid reveals clusters of stockouts in time."}
-    dax: |-
-      DIVIDE (
-          CALCULATE ( COUNTROWS ( InventoryDaily ), InventoryDaily[active] = TRUE (), InventoryDaily[on_hand_units] <= 0 ),
-          CALCULATE ( COUNTROWS ( InventoryDaily ), InventoryDaily[active] = TRUE () )
-      )
     sql: |-
       SELECT CAST(SUM(CASE WHEN on_hand_units <= 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
       FROM inventory_daily WHERE active = 1
@@ -587,11 +508,6 @@ kpis:
       - Counting a single unit sold as "movement" resets the clock on a pallet of dead stock; consider coverage too.
     related: [forecast_bias, days_of_cover, inventory_turnover]
     chart: {type: bar, why: "Value by age bucket (sorted) - shows how much sits beyond the limit."}
-    dax: |-
-      DIVIDE (
-          CALCULATE ( SUM ( InventorySnapshot[on_hand_value] ), InventorySnapshot[days_since_last_movement] > ${age_limit_days} ),
-          SUM ( InventorySnapshot[on_hand_value] )
-      )
     sql: |-
       SELECT SUM(CASE WHEN days_since_last_movement > ${age_limit_days} THEN on_hand_value ELSE 0 END) / SUM(on_hand_value)
       FROM inventory_snapshot
@@ -619,11 +535,6 @@ kpis:
       - Comparing MAPE across portfolios with different volume mix; use WAPE for that.
     related: [wape, forecast_bias]
     chart: {type: bar, why: "MAPE vs WAPE side by side per SKU class makes the volume effect visible."}
-    dax: |-
-      AVERAGEX (
-          FILTER ( Forecast, Forecast[actual_units] > 0 ),
-          ABS ( Forecast[actual_units] - Forecast[forecast_units] ) / Forecast[actual_units]
-      )
     sql: |-
       SELECT AVG(ABS(actual_units - forecast_units) * 1.0 / actual_units) FROM forecast WHERE actual_units > 0
 
@@ -648,11 +559,6 @@ kpis:
       - Computed at a high aggregation level, errors cancel out (SKU A over, SKU B under); compute at SKU level, then sum.
     related: [mape, forecast_bias]
     chart: {type: line, why: "Weekly trend; seasonal peaks annotated."}
-    dax: |-
-      DIVIDE (
-          SUMX ( Forecast, ABS ( Forecast[actual_units] - Forecast[forecast_units] ) ),
-          SUM ( Forecast[actual_units] )
-      )
     sql: |-
       SELECT SUM(ABS(actual_units - forecast_units)) * 1.0 / SUM(actual_units) FROM forecast
 
@@ -678,11 +584,6 @@ kpis:
       - A bias near zero can hide large errors that cancel out; never read it without WAPE.
     related: [wape, obsolescence_share, stockout_rate]
     chart: {type: bar, why: "Diverging bars by month around zero with the green band shaded."}
-    dax: |-
-      DIVIDE (
-          SUM ( Forecast[forecast_units] ) - SUM ( Forecast[actual_units] ),
-          SUM ( Forecast[actual_units] )
-      )
     sql: |-
       SELECT (SUM(forecast_units) - SUM(actual_units)) * 1.0 / SUM(actual_units) FROM forecast
 
@@ -712,10 +613,6 @@ kpis:
       - Anonymous transactions (no customer id) are excluded - if that share changes, retention moves for no business reason.
     related: [repeat_purchase_rate, revenue_at_risk_share]
     chart: {type: line, why: "Quarterly trend; a cohort heatmap is the deeper view."}
-    dax: |-
-      VAR _current = VALUES ( Sales[customer_id] )
-      VAR _previous = CALCULATETABLE ( VALUES ( Sales[customer_id] ), DATEADD ( 'Date'[Date], -1, ${period} ) )
-      RETURN DIVIDE ( COUNTROWS ( INTERSECT ( _previous, _current ) ), COUNTROWS ( _previous ) )
 
   - id: repeat_purchase_rate
     name: Repeat purchase rate
@@ -738,9 +635,6 @@ kpis:
       - Counting invoice lines instead of distinct invoices makes every multi-item basket a "repeat".
     related: [retention_rate, revenue_at_risk_share]
     chart: {type: bar, why: "By acquisition cohort, against the target line."}
-    dax: |-
-      VAR _c = ADDCOLUMNS ( VALUES ( Sales[customer_id] ), "@orders", CALCULATE ( DISTINCTCOUNT ( Sales[invoice_id] ) ) )
-      RETURN DIVIDE ( COUNTROWS ( FILTER ( _c, [@orders] >= 2 ) ), COUNTROWS ( _c ) )
     sql: |-
       SELECT CAST(SUM(CASE WHEN n >= 2 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
       FROM (SELECT customer_id, COUNT(DISTINCT invoice_id) AS n FROM sales GROUP BY customer_id)
@@ -769,11 +663,6 @@ kpis:
       - Recency depends on the snapshot date; recompute on a fixed calendar to keep it comparable.
     related: [retention_rate, repeat_purchase_rate, nps]
     chart: {type: bar, why: "Revenue by segment, sorted, with the At-risk bar highlighted."}
-    dax: |-
-      DIVIDE (
-          CALCULATE ( SUM ( Sales[revenue] ), Customers[rfm_segment] = "At risk" ),
-          SUM ( Sales[revenue] )
-      )
     sql: |-
       SELECT SUM(CASE WHEN segment = 'At risk' THEN monetary ELSE 0 END) / SUM(monetary) FROM customer_rfm
 
@@ -802,11 +691,6 @@ kpis:
       - Treating a 3-point monthly change as real when the margin of error is +/- 8 points.
     related: [revenue_at_risk_share, retention_rate]
     chart: {type: bar, why: "Stacked 100% bar with the three groups (only three parts) plus the score as a label."}
-    dax: |-
-      VAR _n = COUNTROWS ( Survey )
-      VAR _p = CALCULATE ( COUNTROWS ( Survey ), Survey[score] >= 9 )
-      VAR _d = CALCULATE ( COUNTROWS ( Survey ), Survey[score] <= 6 )
-      RETURN DIVIDE ( _p - _d, _n ) * 100
     sql: |-
       SELECT 100.0 * (SUM(CASE WHEN score >= 9 THEN 1 ELSE 0 END) - SUM(CASE WHEN score <= 6 THEN 1 ELSE 0 END)) / COUNT(*)
       FROM survey
@@ -834,11 +718,6 @@ kpis:
       - Placeholder values ("N/A", 0, "unknown") count as filled; pair completeness with validity.
     related: [dq_validity, dq_uniqueness]
     chart: {type: heatmap, why: "Dataset x dimension grid with thresholds - one glance for the data owner."}
-    dax: |-
-      DIVIDE (
-          CALCULATE ( SUM ( DQResults[passed] ), DQResults[dimension] = "completeness" ),
-          CALCULATE ( SUM ( DQResults[total] ), DQResults[dimension] = "completeness" )
-      )
 
   - id: dq_uniqueness
     name: Uniqueness
@@ -861,11 +740,6 @@ kpis:
       - Exact-row duplicates are only part of it; the same entity under two keys needs fuzzy matching.
     related: [dq_completeness]
     chart: {type: heatmap, why: "Same grid as the other dimensions so they can be compared."}
-    dax: |-
-      DIVIDE (
-          CALCULATE ( SUM ( DQResults[passed] ), DQResults[dimension] = "uniqueness" ),
-          CALCULATE ( SUM ( DQResults[total] ), DQResults[dimension] = "uniqueness" )
-      )
 
   - id: dq_validity
     name: Validity
@@ -888,11 +762,6 @@ kpis:
       - A row can fail several rules; report rows, not rule failures, or the percentage can go negative.
     related: [dq_completeness]
     chart: {type: bar, why: "Failures by rule, sorted - the fix list."}
-    dax: |-
-      DIVIDE (
-          CALCULATE ( SUM ( DQResults[passed] ), DQResults[dimension] = "validity" ),
-          CALCULATE ( SUM ( DQResults[total] ), DQResults[dimension] = "validity" )
-      )
 
   - id: dq_timeliness
     name: Timeliness
@@ -915,8 +784,3 @@ kpis:
       - Freshness of the latest record is not timeliness of all records; late back-dated entries hide behind a fresh max date.
     related: [dq_completeness]
     chart: {type: heatmap, why: "Same grid as the other dimensions."}
-    dax: |-
-      DIVIDE (
-          CALCULATE ( SUM ( DQResults[passed] ), DQResults[dimension] = "timeliness" ),
-          CALCULATE ( SUM ( DQResults[total] ), DQResults[dimension] = "timeliness" )
-      )

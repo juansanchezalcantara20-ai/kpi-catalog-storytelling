@@ -1,6 +1,6 @@
 """Calculation engine: computes any catalog KPI, grouped or not, and grades it.
 
-The engine is the only entry point the site and the Power BI exporter use, so
+The engine is the only entry point the story site and the dashboard use, so
 a KPI is computed in exactly one way everywhere.
 """
 

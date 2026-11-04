@@ -13,7 +13,6 @@ from ..catalog import KPI
 from ..engine import Engine, format_threshold, format_value
 from ..formulas import REGISTRY
 from ..paths import TESTS_DIR
-from ..powerbi.export import measure_name
 from ..viz import theme
 
 DIRECTION = {
@@ -44,9 +43,9 @@ def index_page(engine: Engine, current: dict[str, float]) -> str:
     md = [
         "# KPI catalog\n",
         "Generated from [`kpis/catalog.yaml`](https://github.com/juansanchezalcantara20-ai/kpi-catalog-storytelling/blob/main/kpis/catalog.yaml) - "
-        "the single source of truth for the Python engine, the SQL reference queries and the Power BI measures. "
+        "the single source of truth for the Python engine, the SQL reference queries, the story site and the dashboard. "
         f"**{len(engine.catalog)} KPIs** in {len(engine.catalog.cases)} domains. Every KPI page shows its definition, "
-        "how to read it, the common misreadings, its DAX and SQL, the Python function and a worked example "
+        "how to read it, the common misreadings, its SQL, the Python function and a worked example "
         "taken from the test suite.\n",
     ]
     for case, meta in engine.catalog.cases.items():
@@ -132,7 +131,6 @@ def kpi_page(engine: Engine, k: KPI, current: float | None, examples: dict, case
         + inspect.getsource(REGISTRY[k.id]).replace("\n", "\n")
         + "```\n"
     )
-    md.append(f"Power BI measure (DAX):\n\n```dax\n{measure_name(k)} =\n{k.dax_expression}\n```\n")
     if k.sql:
         md.append(f"Reference SQL (tested on SQLite):\n\n```sql\n{k.sql_query}\n```\n")
     return "\n".join(md).replace(

@@ -1,4 +1,4 @@
-"""Headline value of every KPI on its case data (used by the catalog pages and Power BI notes)."""
+"""Headline value of every KPI on its case data (catalog pages and dashboard cards)."""
 
 from __future__ import annotations
 

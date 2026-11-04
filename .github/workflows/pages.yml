@@ -29,23 +29,8 @@ jobs:
         with:
           path: data/raw
           key: raw-data-v1
-      - name: Reproduce everything (lint, tests, data, pages, Power BI layer, site)
+      - name: Reproduce everything (lint, tests, data, story site, dashboard)
         run: make all SOURCE=auto
-      - name: Publish the Power BI model tables with the site
-        run: |
-          mkdir -p site/data/powerbi
-          cp powerbi/data/*.csv site/data/powerbi/
-          cp data/processed/manifest.json site/data/powerbi/manifest.json
-      - name: Power BI package as a downloadable artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: powerbi-layer
-          path: |
-            powerbi/measures.dax
-            powerbi/MODEL.md
-            powerbi/BUILD_CHECKLIST.md
-            powerbi/theme.json
-            powerbi/data/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

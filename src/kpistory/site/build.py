@@ -50,9 +50,6 @@ def build() -> None:
         print("  page antipatterns.md")
     except ModuleNotFoundError:
         pass
-    from .powerbi_page import build as powerbi_page
-
-    (DOCS_DIR / "powerbi.md").write_text(powerbi_page(engine), encoding="utf-8")
     catalog_pages.write(engine, current_values(tables, engine), DOCS_DIR / "catalog", built)
     (DOCS_DIR / "data-sources.md").write_text(data_sources_page(manifest), encoding="utf-8")
     print(f"  catalog pages: {len(engine.catalog) + 1}; data-sources.md")

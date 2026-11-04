@@ -1,4 +1,4 @@
-"""Palette and Plotly template shared by every chart (and exported to the Power BI theme).
+"""Palette and Plotly template shared by every chart (story site and dashboard).
 
 Colours come from a colour-blind-validated categorical order (blue, orange, aqua) and a
 reserved status palette. House rules enforced here:

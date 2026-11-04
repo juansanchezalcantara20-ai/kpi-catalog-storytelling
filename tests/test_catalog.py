@@ -26,10 +26,9 @@ def test_no_pie_charts_in_catalog():
     assert all(k.chart["type"] != "pie" for k in load())
 
 
-def test_params_are_rendered_in_dax_and_sql():
+def test_params_are_rendered_in_sql():
     k = load()["backlog_aged_share"]
-    assert "${" not in k.dax_expression and "> 7" in k.dax_expression
-    assert "> 7" in k.sql_query
+    assert "${" not in k.sql_query and "> 7" in k.sql_query
 
 
 def _broken(mutate):
@@ -72,7 +71,7 @@ def test_rejects_question_without_question_mark():
 
 def test_rejects_unknown_param_reference():
     def mutate(r):
-        r["kpis"][0]["dax"] = "SUM ( T[x] ) > ${nope}"
+        r["kpis"][0]["sql"] = "SELECT 1 WHERE x > ${nope}"
 
     assert "unknown param 'nope'" in _broken(mutate)
 

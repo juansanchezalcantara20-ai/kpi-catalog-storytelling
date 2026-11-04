@@ -1,5 +1,5 @@
 site_name: KPI catalog & storytelling
-site_description: One KPI catalog, one calculation engine, two presentation layers.
+site_description: One KPI catalog, one calculation engine, two presentation layers - a story site and an interactive dashboard.
 site_author: Juan Luis Sánchez Alcántara
 repo_url: https://github.com/juansanchezalcantara20-ai/kpi-catalog-storytelling
 edit_uri: ""
@@ -47,7 +47,7 @@ nav:
       - 5 · Data quality as a KPI: cases/data_quality.md
   - Anti-pattern gallery: antipatterns.md
   - KPI catalog: catalog/index.md
-  - Power BI layer: powerbi.md
+  - KPI dashboard ↗: dashboard/index.html
   - About:
       - How this site reads: method.md
       - Data sources: data-sources.md
