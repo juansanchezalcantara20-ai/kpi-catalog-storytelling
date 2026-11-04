@@ -13,6 +13,7 @@ from ..catalog import KPI
 from ..engine import Engine, format_threshold, format_value
 from ..formulas import REGISTRY
 from ..paths import TESTS_DIR
+from ..powerbi.export import measure_name
 from ..viz import theme
 
 DIRECTION = {
@@ -131,7 +132,7 @@ def kpi_page(engine: Engine, k: KPI, current: float | None, examples: dict, case
         + inspect.getsource(REGISTRY[k.id]).replace("\n", "\n")
         + "```\n"
     )
-    md.append(f"Power BI measure (DAX):\n\n```dax\n[{k.name}] =\n{k.dax_expression}\n```\n")
+    md.append(f"Power BI measure (DAX):\n\n```dax\n{measure_name(k)} =\n{k.dax_expression}\n```\n")
     if k.sql:
         md.append(f"Reference SQL (tested on SQLite):\n\n```sql\n{k.sql_query}\n```\n")
     return "\n".join(md).replace(

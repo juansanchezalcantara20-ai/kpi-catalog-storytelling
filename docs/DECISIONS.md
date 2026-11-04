@@ -91,3 +91,12 @@ decisions are appended at the end of each phase.
 | 57 | Measure names are the catalog names stripped of brackets and symbols; each measure lives in its KPI's input table. | Avoids escaping problems in DAX object names and keeps measures next to the facts they count. |
 | 58 | The committed Power BI files are **tested to be identical to what the catalog generates**; data CSVs are not committed. | Guarantees the DAX in the repository is the DAX in the catalog. CSVs are reproducible with `make data powerbi` (and on a normal network will contain the real UCI data). |
 | 59 | `powerbi/theme.json` is generated from the same palette module as the website. | Two tools, one visual language. |
+
+## Phase 7 · README and release
+
+| # | Decision | Why |
+|---|----------|-----|
+| 60 | README screenshots are cropped elements of the real built site (Playwright, 2× scale), committed in `docs/img/`. | A recruiter skimming GitHub sees the work without opening the site; crops of real pages cannot drift into mock-ups. |
+| 61 | The README maps each requirement of the target job descriptions to a concrete file or page ("What this demonstrates"). | Five-minute review: claims are verifiable by clicking. |
+| 62 | "How this was built" and "Scope & limitations" are explicit about Claude Code, synthetic data, illustrative targets and the unexecuted Power BI layer. | Honesty is part of the method being demonstrated. |
+| 63 | The repository and Pages URLs assume the name `kpi-catalog-storytelling` under `juansanchezalcantara20-ai`. | The build session had no repository attached; if the name differs, update `mkdocs.yml` (`repo_url`) and the README links. |
