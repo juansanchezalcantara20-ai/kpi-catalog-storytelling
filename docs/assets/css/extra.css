@@ -76,3 +76,28 @@
 .md-typeset details.tecnico > summary { background: #f4f4f1; }
 .md-typeset details.tecnico > summary::before { background-color: #898781; }
 .md-typeset .admonition.abstract, .md-typeset details.abstract { font-size: 0.8rem; }
+/* --- Tooltips (same look in the site and the dashboard) --- */
+.kpi-tip {
+  position: fixed; z-index: 1000; max-width: min(340px, calc(100vw - 16px)); width: max-content;
+  background: #fff; color: #0b0b0b; border: 1px solid #c3c2b7; border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16); padding: 10px 12px; font-size: 0.68rem; line-height: 1.4;
+  pointer-events: none; text-align: left;
+}
+.kpi-tip[hidden] { display: none; }
+.kpi-tip b { display: block; font-size: 0.72rem; margin-bottom: 4px; }
+.kpi-tip dl { margin: 0; }
+.kpi-tip dt { font-weight: 650; color: #52514e; margin-top: 4px; }
+.kpi-tip dd { margin: 0; }
+.md-typeset .kpi-status[data-tip] { text-decoration: underline dotted; text-underline-offset: 2px; }
+.md-typeset .valor-card { border: 1px solid var(--hairline); border-left: 6px solid var(--kpi-act); border-radius: 8px; padding: 0.9rem 1.1rem; background: var(--surface); margin: 0.8rem 0; }
+.md-typeset .valor-card .grande { font-size: 1.9rem; font-weight: 700; line-height: 1.15; }
+.md-typeset .valor-card .sub { color: var(--ink-2); font-size: 0.78rem; }
+.md-typeset .aviso-supuestos { font-size: 0.7rem; color: var(--ink-2); font-style: italic; }
+.md-typeset .simulador { border: 1px solid var(--hairline); border-radius: 8px; padding: 0.8rem 1rem; background: #f7f7f4; margin: 1rem 0; }
+.md-typeset .simulador label { display: block; font-size: 0.75rem; font-weight: 600; margin-top: 0.4rem; }
+.md-typeset .simulador input[type=range] { width: 100%; }
+.md-typeset .simulador input[type=number] { width: 7rem; padding: 2px 4px; border: 1px solid #c3c2b7; border-radius: 4px; }
+.md-typeset .simulador .resultado { font-size: 1.2rem; font-weight: 700; margin-top: 0.5rem; }
+.md-typeset .simulador .fila { display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; }
+.md-typeset .valor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; }
+@media (max-width: 600px) { .md-typeset .valor-card .grande { font-size: 1.4rem; } }

@@ -60,6 +60,7 @@ kpis:
   thresholds:
     green: 2.0
     amber: 4.0
+  target_why: Dos horas es lo que un cliente tolera sin volver a llamar; más allá, duplica contactos.
   owner: Jefe de mesa de ayuda
   source: Sistema de solicitudes
   input:
@@ -102,6 +103,7 @@ kpis:
   thresholds:
     green: 24.0
     amber: 36.0
+  target_why: Un día hábil cubre la mayoría de las solicitudes simples sin acumular pendientes.
   owner: Jefe de mesa de ayuda
   source: Sistema de solicitudes
   input:
@@ -151,6 +153,7 @@ kpis:
   thresholds:
     green: 0.9
     amber: 0.85
+  target_why: 90 de cada 100 deja margen para los casos realmente complejos sin romper la promesa.
   owner: Jefe de mesa de ayuda
   source: Sistema de solicitudes
   input:
@@ -195,6 +198,7 @@ kpis:
     amber: 0.2
   params:
     age_limit_days: 7
+  target_why: Si más de 1 de cada 10 pendientes pasa de 7 días, el plazo de las prioridades bajas ya está comprometido.
   owner: Coordinador de equipo
   source: Sistema de solicitudes
   input:
@@ -238,6 +242,8 @@ kpis:
   thresholds:
     green: 0.7
     amber: 0.6
+  target_why: 7 de cada 10 es alcanzable con buena base de conocimiento; menos indica falta de capacitación o de
+    autoridad.
   owner: Jefe de mesa de ayuda
   source: Sistema de solicitudes
   input:
@@ -277,6 +283,7 @@ kpis:
   thresholds:
     green: 0.05
     amber: 0.08
+  target_why: Por encima de 5 de cada 100 la rapidez empieza a pagarse con calidad.
   owner: Responsable de calidad del servicio
   source: Sistema de solicitudes
   input:
@@ -315,6 +322,7 @@ kpis:
   thresholds:
     green: 150.0
     amber: 100.0
+  target_why: 150 horas equivale a menos de una falla cada dos semanas por máquina en dos turnos.
   owner: Ingeniero de confiabilidad
   source: Datos de proceso (AI4I 2020) asignados a una flota de máquinas + órdenes de trabajo simuladas
   input:
@@ -355,6 +363,7 @@ kpis:
   thresholds:
     green: 4.0
     amber: 6.0
+  target_why: Cuatro horas es una reparación de medio turno con repuestos a mano.
   owner: Supervisor de mantenimiento
   source: Órdenes de trabajo (simuladas)
   input:
@@ -396,6 +405,7 @@ kpis:
   thresholds:
     green: 0.97
     amber: 0.95
+  target_why: 97 % deja cerca de una hora perdida por cada 33 programadas, un nivel típico de una planta bien mantenida.
   owner: Jefe de mantenimiento
   source: Datos de proceso (AI4I 2020) + órdenes de trabajo simuladas
   input:
@@ -439,6 +449,7 @@ kpis:
     amber: 0.8
   params:
     tolerance_days: 3
+  target_why: Con 9 de cada 10 preventivos a tiempo, el riesgo que queda abierto es pequeño y controlado.
   owner: Planificador de mantenimiento
   source: Órdenes de trabajo (simuladas)
   input:
@@ -481,6 +492,7 @@ kpis:
   thresholds:
     green: 0.8
     amber: 0.65
+  target_why: Cuando 8 de cada 10 horas son planificadas, las emergencias dejan de mandar sobre la agenda.
   owner: Jefe de mantenimiento
   source: Órdenes de trabajo (simuladas)
   input:
@@ -520,6 +532,7 @@ kpis:
   thresholds:
     green: 0.95
     amber: 0.9
+  target_why: 95 de cada 100 unidades atendidas es un nivel de servicio habitual en distribución minorista.
   owner: Planificador de abastecimiento
   source: Líneas de pedido (demanda de UCI Online Retail II) + simulación de inventario
   input:
@@ -560,6 +573,7 @@ kpis:
   thresholds:
     green: 0.9
     amber: 0.8
+  target_why: 9 de cada 10 pedidos completos y a tiempo es lo que un cliente comercial considera confiable.
   owner: Jefe de logística
   source: Líneas de pedido (demanda de UCI Online Retail II) + simulación de inventario
   input:
@@ -605,6 +619,7 @@ kpis:
   thresholds:
     green: 8.0
     amber: 5.0
+  target_why: Ocho vueltas al año equivalen a unas seis semanas de inventario, razonable para productos de regalo.
   owner: Controlador de inventarios
   source: Simulación de inventario sobre demanda pública
   input:
@@ -650,6 +665,7 @@ kpis:
     amber:
     - 7.0
     - 60.0
+  target_why: Entre 2 y 5 semanas cubre la demora del proveedor sin inmovilizar dinero de más.
   owner: Planificador de abastecimiento
   source: Simulación de inventario sobre demanda pública
   input:
@@ -693,6 +709,7 @@ kpis:
   thresholds:
     green: 0.03
     amber: 0.06
+  target_why: Con 3 días sin producto de cada 100 el cliente casi nunca encuentra la estantería vacía.
   owner: Planificador de abastecimiento
   source: Simulación de inventario sobre demanda pública
   input:
@@ -735,6 +752,7 @@ kpis:
     amber: 0.1
   params:
     age_limit_days: 180
+  target_why: Más de 5 % del valor sin moverse empieza a pesar en el resultado cuando hay que rematarlo.
   owner: Controlador de inventarios
   source: Simulación de inventario sobre demanda pública
   input:
@@ -775,6 +793,7 @@ kpis:
   thresholds:
     green: 0.4
     amber: 0.6
+  target_why: 40 % es un error aceptable para productos de poca venta, donde el pronóstico pesa poco.
   owner: Planificador de demanda
   source: Demanda (UCI Online Retail II) + pronóstico base calculado en este proyecto
   input:
@@ -813,6 +832,7 @@ kpis:
   thresholds:
     green: 0.3
     amber: 0.45
+  target_why: 30 % de unidades mal pronosticadas se cubre con inventario de seguridad razonable.
   owner: Planificador de demanda
   source: Demanda (UCI Online Retail II) + pronóstico base calculado en este proyecto
   input:
@@ -855,6 +875,7 @@ kpis:
     amber:
     - -0.1
     - 0.1
+  target_why: Hasta 5 % de desvío en cualquier sentido es ruido normal; más es un error de método.
   owner: Planificador de demanda
   source: Demanda (UCI Online Retail II) + pronóstico base calculado en este proyecto
   input:
@@ -896,6 +917,8 @@ kpis:
     amber: 0.4
   params:
     period: QUARTER
+  target_why: Si la mitad de los clientes vuelve cada trimestre, la base de ingresos se sostiene sin depender solo
+    de clientes nuevos.
   owner: Responsable de relación con clientes
   source: Transacciones (UCI Online Retail II)
   input:
@@ -933,6 +956,7 @@ kpis:
   thresholds:
     green: 0.6
     amber: 0.5
+  target_why: 6 de cada 10 clientes con una segunda compra indica que la primera experiencia funcionó.
   owner: Responsable de relación con clientes
   source: Transacciones (UCI Online Retail II)
   input:
@@ -972,6 +996,8 @@ kpis:
   thresholds:
     green: 0.1
     amber: 0.2
+  target_why: Hasta 10 % del ingreso en clientes inactivos es manejable con una campaña; más es un riesgo para el
+    año.
   owner: Responsable de relación con clientes
   source: Transacciones (UCI Online Retail II), segmentación calculada en este proyecto
   input:
@@ -1012,6 +1038,7 @@ kpis:
   thresholds:
     green: 30.0
     amber: 10.0
+  target_why: Un resultado de +30 indica clara mayoría de clientes que recomiendan.
   owner: Responsable de experiencia del cliente
   source: Encuesta simulada
   input:
@@ -1050,6 +1077,7 @@ kpis:
   thresholds:
     green: 0.99
     amber: 0.95
+  target_why: Con 99 de cada 100 celdas llenas, los faltantes no cambian ningún indicador de negocio.
   owner: Responsable de los datos
   source: Todos los conjuntos de datos del proyecto
   input:
@@ -1083,6 +1111,7 @@ kpis:
   thresholds:
     green: 0.999
     amber: 0.99
+  target_why: 'Casi cero duplicados: cada duplicado infla directamente un conteo de negocio.'
   owner: Responsable de los datos
   source: Todos los conjuntos de datos del proyecto
   input:
@@ -1115,6 +1144,7 @@ kpis:
   thresholds:
     green: 0.98
     amber: 0.95
+  target_why: 98 de cada 100 filas válidas deja los errores por debajo de lo que mueve un indicador.
   owner: Responsable de los datos
   source: Todos los conjuntos de datos del proyecto
   input:
@@ -1148,6 +1178,7 @@ kpis:
   thresholds:
     green: 0.95
     amber: 0.9
+  target_why: 95 de cada 100 registros dentro de un día permite que los indicadores semanales lleguen a tiempo.
   owner: Ingeniero de datos
   source: Conjuntos de datos que registran la hora de carga
   input:

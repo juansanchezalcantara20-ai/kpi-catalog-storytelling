@@ -7,9 +7,11 @@ import pandas as pd
 from ..data.quality import load_rules
 from ..engine import Engine
 from ..formulas.data_quality import timeliness_counts
+from ..valor import get_valores
 from ..viz import charts
 from .common import (
     aviso_datos,
+    bloque_bala,
     de_cada_100,
     decisiones,
     detalle_tecnico,
@@ -17,6 +19,8 @@ from .common import (
     n,
     pct,
     pregunta,
+    seccion_decision,
+    seccion_valor,
     seguimiento,
     tiles,
 )
@@ -73,6 +77,9 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         "Estos valores juntan todos los conjuntos de datos, ponderados por número de filas (las ventas pesan mucho). La cuadrícula de abajo, por conjunto de datos, es la vista que importa.\n\n"
     )
 
+    md.append(
+        bloque_bala(e, H, ["dq_completeness", "dq_uniqueness", "dq_validity", "dq_timeliness"])
+    )
     md.append("## Lo que encontramos\n\n")
     order = [rules[k]["label"] for k in rules]
     matrix = dq.pivot(index="label", columns="dimension", values="value")[DIMS].reindex(order)
@@ -183,6 +190,9 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         ),
     ]
     md.append(decisiones(rows))
+    v = get_valores(t, e, manifest)["data_quality"]
+    md.append(seccion_valor(e, v))
+    md.append(seccion_decision(e, v, rows[0][0]))
     md.append("## Cómo lo seguimos midiendo\n\n")
     md.append(seguimiento(e, [
         ("dq_completeness", "En cada carga, por campo obligatorio", "Un campo obligatorio bajo 95 %"),

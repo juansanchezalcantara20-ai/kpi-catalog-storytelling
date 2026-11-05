@@ -7,9 +7,11 @@ import plotly.graph_objects as go
 
 from ..engine import Engine
 from ..formulas.customers import PANDAS_PERIOD, nps_margin_of_error, retention_series
+from ..valor import get_valores
 from ..viz import charts, theme
 from .common import (
     aviso_datos,
+    bloque_bala,
     de_cada_100,
     decisiones,
     detalle_tecnico,
@@ -17,6 +19,8 @@ from .common import (
     n,
     pct,
     pregunta,
+    seccion_decision,
+    seccion_valor,
     seguimiento,
     tiles,
 )
@@ -82,23 +86,21 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         f"nombres. La recomendación agrega la voz del cliente, siempre con su número de respuestas (aquí ± {moe:.0f} puntos de margen de error).\n\n"
     )
 
+    md.append(
+        bloque_bala(
+            e, H, ["revenue_at_risk_share", "retention_rate", "repeat_purchase_rate", "nps"]
+        )
+    )
     md.append("## Lo que encontramos\n\n")
     rs = pd.DataFrame({"q": list(ret.index), "v": ret.values})
     lo, hi = rs.loc[rs["v"].idxmin()], rs.loc[rs["v"].idxmax()]
-    fig = charts.line(
-        [trimestre(q) for q in rs["q"]], rs["v"],
+    fig = charts.kpi_trend(
+        e.catalog["retention_rate"], [trimestre(q) for q in rs["q"]], rs["v"].tolist(),
         conclusion=f"Vuelven entre {pct(lo['v'])} ({trimestre(lo['q'])}) y {pct(hi['v'])} ({trimestre(hi['q'])}) de los clientes: "
         f"en promedio {de_cada_100(1 - rs['v'].mean(), 'clientes')} de un trimestre no compran en el siguiente",
-        subtitle="De cada 100 clientes de un trimestre, cuántos volvieron a comprar en el siguiente (solo trimestres completos)",
-        name="Volvieron a comprar", pct=True,
+        subtitle="De cada 100 clientes de un trimestre, cuántos volvieron a comprar en el siguiente; verde = zona en meta, amarillo = margen de alerta",
+        events=[(trimestre(lo["q"]), "trimestre más bajo")], y_range=(0, 100),
     )  # fmt: skip
-    charts.add_target(
-        fig,
-        e.catalog["retention_rate"].target,
-        f"Meta {pct(e.catalog['retention_rate'].target)}",
-        pct=True,
-    )
-    fig.update_yaxes(range=[0, 100])
     md.append(
         charts.to_html(
             fig,
@@ -205,12 +207,16 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         f"ingreso. Llamar a los {half} primeros recupera la mitad de esa oportunidad.\n\n"
     )
     md.append("## Qué decidimos\n\n")
-    md.append(decisiones([
+    dec_rows = [
         (f"Campaña de recuperación con la lista de clientes «en riesgo» ordenada por ingreso: los primeros {half} explican la mitad. Llamada de un ejecutivo, no un correo masivo.", "Responsable de relación con clientes", fecha(end + pd.Timedelta(days=30))),
         ("Llamar a los clientes que nos calificaron de 0 a 6 en menos de 48 horas y registrar el motivo.", "Responsable de experiencia del cliente", fecha(end + pd.Timedelta(days=14))),
         ("Medir la recompra por año de primera compra antes de fijar una sola meta.", "Analista comercial", fecha(end + pd.Timedelta(days=45))),
         (f"Reducir las compras sin cliente identificado ({pct(anon_rev)} del ingreso): sin ese dato no hay seguimiento posible.", "Jefe de ventas en línea", fecha(end + pd.Timedelta(days=60))),
-    ]))  # fmt: skip
+    ]  # fmt: skip
+    md.append(decisiones(dec_rows))
+    v = get_valores(t, e, manifest)["customers"]
+    md.append(seccion_valor(e, v))
+    md.append(seccion_decision(e, v, dec_rows[0][0]))
     md.append("## Cómo lo seguimos midiendo\n\n")
     md.append(seguimiento(e, [
         ("revenue_at_risk_share", "Cada mes, con la lista de clientes (avisa antes)", "Más de 20 %: ampliar la campaña"),

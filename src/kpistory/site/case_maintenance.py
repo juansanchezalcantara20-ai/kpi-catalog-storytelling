@@ -7,19 +7,23 @@ import plotly.graph_objects as go
 
 from ..data.maintenance import FAILURE_LABEL, N_MACHINES, RUN_HOURS
 from ..engine import Engine
+from ..valor import get_valores
 from ..viz import charts, theme
 from .common import (
     aviso_datos,
+    bloque_bala,
     decisiones,
     detalle_tecnico,
     en_30_segundos,
     n,
     pct,
     pregunta,
+    seccion_decision,
+    seccion_valor,
     seguimiento,
     tiles,
 )
-from .current import fecha, headline
+from .current import fecha, headline, mes
 
 TOOL_CHANGE_AT = 190  # minutes of tool wear: proposed condition-based tool change
 LONG_REPAIR_H = 12
@@ -99,7 +103,33 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         "planificado avisan antes: se mueven semanas antes que las fallas.\n\n"
     )
 
+    md.append(bloque_bala(e, H, ["availability", "mtbf", "mttr", "pm_compliance"]))
     md.append("## Lo que encontramos\n\n")
+    ka = e.catalog["availability"]
+    av_m = e.compute_by("availability", ap, "month")
+    below_m = av_m[av_m["value"] < a_target]
+    first_m = below_m["month"].min() if len(below_m) else None
+    worst_m = av_m.loc[av_m["value"].idxmin()]
+    fig = charts.kpi_trend(
+        ka, [mes(m) for m in av_m["month"]], av_m["value"].tolist(),
+        conclusion=f"La flota está bajo la meta casi todo el año; el peor mes fue {mes(worst_m['month'])} con {pct(worst_m['value'], 1)}"
+        if len(below_m) > len(av_m) / 2 else f"La disponibilidad cae bajo la meta en {len(below_m)} de {len(av_m)} meses",
+        subtitle="Disponibilidad de toda la flota por mes; verde = zona en meta, amarillo = margen de alerta (el eje empieza en 80 %)",
+        events=[(mes(worst_m["month"]), "peor mes")] + ([(mes(first_m), "aquí empezó")] if first_m is not None and first_m != worst_m["month"] else []),
+        n=ap.groupby("month")["failures"].sum().reindex(av_m["month"]).tolist(), n_label="fallas", y_range=(80, 100.5),
+    )  # fmt: skip
+    md.append(charts.to_html(fig, height=380))
+    sm = e.compute_by("availability", ap, ["asset_id", "month"])
+    groups = {
+        a_: ([mes(m) for m in g["month"]], g["value"].tolist()) for a_, g in sm.groupby("asset_id")
+    }
+    fig = charts.small_multiples(
+        ka, groups, cols=5,
+        conclusion=f"Las caídas no son de toda la flota: se concentran en {', '.join(worst)}",
+        subtitle="Disponibilidad por mes, un panel por máquina, todos con la misma escala; la línea punteada es la meta",
+        highlight=set(worst),
+    )  # fmt: skip
+    md.append(charts.to_html(fig, height=440))
     fig = charts.bar(
         av.index, av["availability"],
         conclusion=f"{len(worst)} de {N_MACHINES} máquinas están bajo {pct(amber)} y concentran {pct(worst_down)} de las horas perdidas",
@@ -253,6 +283,9 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
             )
         )
     md.append(decisiones(rows))
+    v = get_valores(t, e, manifest)["maintenance"]
+    md.append(seccion_valor(e, v))
+    md.append(seccion_decision(e, v, rows[0][0]))
     md.append("## Cómo lo seguimos midiendo\n\n")
     md.append(seguimiento(e, [
         ("pm_compliance", "Cada semana, por cuadrilla (avisa antes)", "Menos de 80 % en una cuadrilla: reprogramar la semana"),

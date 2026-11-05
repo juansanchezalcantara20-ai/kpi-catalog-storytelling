@@ -29,7 +29,7 @@
       "additionalProperties": false,
       "required": ["id", "name", "case", "question", "meaning", "definition", "calculation", "formula", "unit", "granularity",
                    "direction", "target", "thresholds", "owner", "source", "input", "how_to_read",
-                   "misreadings", "decision", "balance", "related", "chart"],
+                   "misreadings", "decision", "balance", "target_why", "related", "chart"],
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
         "name": {"type": "string", "minLength": 3},
@@ -40,6 +40,7 @@
         "calculation": {"$ref": "#/$defs/text"},
         "decision": {"$ref": "#/$defs/text"},
         "balance": {"$ref": "#/$defs/text"},
+        "target_why": {"$ref": "#/$defs/text"},
         "formula": {"type": "string", "minLength": 5},
         "unit": {"enum": ["percent", "hours", "days", "times_per_year", "score"]},
         "granularity": {"$ref": "#/$defs/text"},
@@ -74,7 +75,7 @@
           "required": ["type", "why"],
           "additionalProperties": false,
           "properties": {
-            "type": {"enum": ["line", "bar", "bullet", "histogram", "boxplot", "heatmap", "scatter"]},
+            "type": {"enum": ["line", "bar", "bullet", "histogram", "boxplot", "heatmap", "scatter", "pareto", "waterfall", "small_multiples"]},
             "why": {"$ref": "#/$defs/text"}
           }
         },

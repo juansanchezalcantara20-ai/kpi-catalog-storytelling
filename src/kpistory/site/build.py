@@ -23,7 +23,8 @@ def _copy_plotly_js() -> None:
     dst = DOCS_DIR / "assets" / "js" / "plotly.min.js"
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, dst)
-    shutil.copyfile(Path(__file__).parent / "assets" / "plotly-es.js", dst.parent / "plotly-es.js")
+    for name in ("plotly-es.js", "tooltips.js", "simulador.js"):
+        shutil.copyfile(Path(__file__).parent / "assets" / name, dst.parent / name)
 
 
 def build() -> None:
@@ -51,6 +52,12 @@ def build() -> None:
         print("  page antipatterns.md")
     except ModuleNotFoundError:
         pass
+    from ..valor import get_valores
+    from .resumen import home_page, resumen_page
+
+    vals = get_valores(tables, engine, manifest)
+    (DOCS_DIR / "resumen.md").write_text(resumen_page(vals, manifest), encoding="utf-8")
+    (DOCS_DIR / "index.md").write_text(home_page(vals, manifest), encoding="utf-8")
     catalog_pages.write(engine, headline(tables, engine, manifest), DOCS_DIR / "catalog")
     (DOCS_DIR / "data-sources.md").write_text(data_sources_page(manifest), encoding="utf-8")
     print(f"  catalog pages: {len(engine.catalog) + 1}; data-sources.md")

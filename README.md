@@ -17,42 +17,52 @@ qué pasó y qué decidir, y un tablero interactivo para el seguimiento semanal.
 | **Datos reales** | solicitudes ciudadanas de Nueva York (servicio 311) y dos conjuntos públicos del repositorio UCI, descargados cada mes en GitHub Actions |
 | **Fórmulas probadas** | un ejemplo calculado a mano por indicador, comprobado contra el cálculo en Python y contra una consulta SQL |
 | **Legibilidad probada** | una prueba automática falla si una página tiene palabras técnicas en inglés, siglas sin explicar o código fuera del detalle técnico |
+| **Valor en soles** | cada brecha se traduce a soles y horas, con un simulador «¿y si…?» y supuestos editables |
 
 ## Recorrido en cinco minutos
 
-**1 · Cada caso empieza con «En 30 segundos»** y con una tarjeta por indicador: valor, meta, semáforo con texto
-(🟢 En meta · 🟡 Vigilar · 🔴 Actuar) y qué significa.
+**1 · Resumen para gerencia.** Cuánto vale cerrar las brechas, las tres alertas más caras con acción, responsable y
+fecha, y el valor total en juego.
 
-![Tarjetas del caso de atención de solicitudes](docs/img/case-service-tiles.png)
+![Resumen para gerencia](docs/capturas/escritorio-resumen.png)
 
-**2 · El título de cada gráfico es la conclusión**, calculada desde los datos.
+**2 · Cada caso empieza con «En 30 segundos»** y con una tarjeta por indicador. Al pasar el mouse (o tocar en el celular)
+se abre qué mide, cómo se calcula, por qué esa meta, qué decisión ayuda a tomar y con qué se equilibra.
 
-![Cumplimiento por equipo](docs/img/case-service-queue.png)
+![Tooltip de una tarjeta](docs/capturas/escritorio-caso-tooltip.png)
 
-**3 · Separar las causas.** La disponibilidad depende de cada cuánto falla una máquina y de cuánto tarda en volver:
-dos problemas distintos, dos decisiones distintas.
+**3 · El tablero** abre con el valor en juego y el simulador «¿y si…?»; al hacer clic en un indicador muestra la tendencia con
+la zona en meta y el margen de alerta, y un desglose: un clic en una barra filtra la tendencia.
 
-![Tiempo entre fallas frente a tiempo de reparación](docs/img/case-maintenance-scatter.png)
+![Tablero](docs/capturas/escritorio-tablero.png)
 
-**4 · La dirección importa.** El sesgo del pronóstico se evalúa contra una franja: se queda corto antes de la temporada
-(faltan productos) y se pasa después (sobra inventario).
+**4 · En el celular** todo cabe sin desplazarse de lado, y el tooltip se abre completo con un toque.
 
-![Sesgo del pronóstico por mes](docs/img/case-inventory-bias.png)
+![Tablero en el celular](docs/capturas/celular-tablero.png) ![Tooltip en el celular](docs/capturas/celular-caso-tooltip.png)
 
-**5 · La calidad de los datos se mide como cualquier indicador**, y dice «no se puede medir» cuando falta un dato en
-vez de inventar un 100 %.
+**Antes y después** (versión publicada el 4 nov 2026 frente a esta):
 
-![Cuadrícula de calidad de datos](docs/img/case-dq-grid.png)
+| Antes | Después |
+|---|---|
+| ![Antes: tablero en inglés](docs/capturas/antes-tablero.png) | ![Después: tablero en español con valor](docs/capturas/despues-tablero.png) |
 
-**6 · Errores comunes al medir:** el mismo dato mostrado de forma engañosa y de forma honesta.
+*Las capturas usan los datos de respaldo (simulados); el sitio publicado usa los datos reales de cada mes.*
 
-![Eje que no empieza en cero](docs/img/antipattern-axis.png)
+## El valor en soles
 
-**7 · El tablero** muestra los mismos números que las historias, con filtros por tema y por semáforo.
+Cada caso traduce su brecha a soles y horas con supuestos de `config/supuestos_valor.yaml` (todos ilustrativos y
+editables en la web):
 
-![Tablero de indicadores](docs/img/dashboard.png)
+| Caso | Qué se cuesta | Supuesto principal |
+|---|---|---|
+| Atención de solicitudes | pendientes con más de 7 días y solicitudes fuera de plazo | S/ 60 al mes por pendiente antigua; S/ 45 por solicitud fuera de plazo |
+| Mantenimiento | horas de máquina parada por encima de la meta | S/ 450 por hora parada |
+| Inventario | pedidos incompletos o tardíos e inventario sin movimiento | S/ 25 por pedido con problema; 25 % al año por mantener inventario |
+| Clientes | ingreso de clientes en riesgo | se pierde un margen de 30 % de lo que compraban |
+| Calidad de los datos | registros de venta con datos faltantes | S/ 4 (6 minutos) por registro corregido |
 
-*Las capturas se tomaron con los datos de respaldo (simulados); el sitio publicado usa los datos reales de cada mes.*
+Cada caso cierra el ciclo **decisión → resultado**: un escenario simulado y transparente de seis meses con y sin la
+decisión, el valor capturado y la respuesta a «¿es ruido?» con un intervalo.
 
 ## Los casos
 
@@ -107,6 +117,12 @@ make all SOURCE=synthetic
 mkdocs serve
 ```
 
+Revisión visual (capturas en escritorio y celular, sin scroll horizontal y con tooltips completos):
+
+```bash
+NODE_PATH=$(npm root -g) node tools/revision_visual.js
+```
+
 ## Qué demuestra
 
 | Lo que piden las vacantes | Dónde está |
@@ -114,7 +130,8 @@ mkdocs serve
 | **Diseño de indicadores** (control de gestión, planeamiento y control) | `kpis/catalog.yaml`: pregunta, definición, cálculo, meta, semáforo, responsable, errores de lectura, decisión y contrapeso de 28 indicadores |
 | **Leer indicadores con criterio** | adelantados frente a atrasados, mediana frente a promedio, unidades frente a pedidos completos, error ponderado frente a promedio, sesgo con franja, recomendación con margen de error, y la revisión de la aparente contradicción del caso 1 |
 | **Contar historias con datos** | cinco casos con la misma estructura; títulos que son conclusiones; decisiones con responsable y fecha |
-| **Diseño de tableros** | tarjetas con semáforo y texto, paleta apta para daltonismo, un mensaje por gráfico, meta siempre visible, tablero interactivo con filtros |
+| **Diseño de tableros** | tarjetas con semáforo y tooltip, gráficos según la pregunta (bala, Pareto, cascada, pequeños múltiples), zonas de meta y alerta, desglose con drill-down |
+| **Traducir indicadores a dinero** | brecha → unidades afectadas → soles y horas al mes, simulador «¿y si…?», resumen para gerencia con las alertas más caras |
 | **SQL** | consulta de referencia para 23 indicadores, probada contra los ejemplos calculados a mano |
 | **Datos reales y automatización** | descarga paginada con reintentos y mínimo de filas, actualización mensual en GitHub Actions, plan B con aviso |
 | **Calidad y gobierno de datos** | cuatro dimensiones de calidad como indicadores, reglas por conjunto de datos y candado de privacidad |
@@ -142,11 +159,13 @@ los gráficos, las reglas de honestidad y las etapas. Todas las decisiones y sus
 
 ```
 kpis/                catálogo de indicadores, su esquema y las reglas de calidad de datos
-config/              fuentes públicas: dirección, filtros, periodo y supuestos
+config/              fuentes públicas (dirección, filtros, periodo) y supuestos de valor en soles
 src/kpistory/        motor, fórmulas, datos, gráficos, sitio, tablero y candado de privacidad
-tests/               ejemplos calculados a mano y pruebas de fórmulas, SQL, datos, fuentes, legibilidad y coherencia
+tests/               ejemplos calculados a mano y pruebas de fórmulas, SQL, datos, fuentes, legibilidad, coherencia, valor y gráficos
+tools/               revisión visual con Playwright
+includes/            glosario de siglas que el sitio muestra al pasar el mouse
 cases/               un README por caso: fuente, plan B, semilla y supuestos
-docs/                páginas fijas del sitio, registro de decisiones y capturas
+docs/                páginas fijas del sitio, registro de decisiones y capturas (docs/capturas)
 .devcontainer/       entorno de GitHub Codespaces
 .github/workflows/   CI (cada cambio) y Actualizar datos (mensual, manual y en cada cambio de la rama principal)
 ```

@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from ..engine import Engine
+from ..valor import get_valores
 from ..viz import charts, theme
 from .common import (
     aviso_datos,
@@ -16,6 +17,8 @@ from .common import (
     n,
     pct,
     pregunta,
+    seccion_decision,
+    seccion_valor,
     seguimiento,
     tiles,
 )
@@ -150,6 +153,19 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
             ],
         )
     )
+    bl = [
+        kk
+        for kk in ("sla_compliance", "backlog_aged_share", "resolution_time")
+        if H[kk].value == H[kk].value
+    ]
+    fig = charts.bullets(
+        [(e.catalog[kk], H[kk].value) for kk in bl],
+        conclusion=f"El mayor salto hasta la meta está en las pendientes antiguas: {pct(H['backlog_aged_share'].value)} frente a "
+        f"{pct(e.catalog['backlog_aged_share'].target)}" if e.status("backlog_aged_share", H["backlog_aged_share"].value) == "red"
+        else "Los indicadores principales están cerca de su meta",
+        subtitle="¿Cuánto falta para la meta? Barra oscura = valor actual; raya negra = meta; verde = en meta, amarillo = margen de alerta, rojo = actuar",
+    )  # fmt: skip
+    md.append(charts.to_html(fig, height=110 + 110 * len(bl)))
     md.append(
         "El cumplimiento del plazo es el resultado que siente el cliente, pero llega tarde: se mide cuando la "
         f"solicitud se cierra. Las **pendientes con más de {age_limit} días** avisan antes: lo que hoy es antiguo será un "
@@ -161,29 +177,18 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     # ------------------------------------------------------------------- hallazgo
     md.append("## Lo que encontramos\n\n")
     when = f"desde {mes(first_below)}" if first_below is not None else "en ningún mes"
-    fig = charts.line(
-        [mes(m) for m in monthly["resolved_month"]], monthly["value"],
+    vol = resolved.groupby("resolved_month").size()
+    events = [(mes(first_below), "aquí empezó")] if first_below is not None else []
+    fig = charts.kpi_trend(
+        e.catalog["sla_compliance"], [mes(m) for m in monthly["resolved_month"]], monthly["value"].tolist(),
         conclusion=f"El cumplimiento del plazo está por debajo de la meta {when}" if first_below is not None
         else "El cumplimiento del plazo se mantiene en meta todos los meses",
-        subtitle="De cada 100 solicitudes cerradas en el mes, cuántas se cerraron dentro de su plazo (el eje empieza en 50 %)",
-        name="Dentro del plazo", pct=True,
+        subtitle="De cada 100 solicitudes cerradas en el mes, cuántas se cerraron dentro de su plazo; verde = zona en meta, amarillo = margen de alerta (el eje empieza en 50 %)",
+        events=events, n=[float(vol.get(m, 0)) for m in monthly["resolved_month"]], n_label="solicitudes cerradas", y_range=(50, 101),
     )  # fmt: skip
-    charts.add_target(fig, target, f"Meta {pct(target)}", pct=True)
-    if first_below is not None:
-        y0 = float(monthly.loc[monthly["resolved_month"].eq(first_below), "value"].iloc[0]) * 100
-        charts.annotate(fig, mes(first_below), y0, "primer mes bajo la meta", ay=40)
-    fig.update_yaxes(range=[50, 101])
-    md.append(
-        charts.to_html(
-            fig,
-            table=pd.DataFrame(
-                {
-                    "Mes": [mes(m) for m in monthly["resolved_month"]],
-                    "Dentro del plazo": [pct(v, 1) for v in monthly["value"]],
-                }
-            ),
-        )
-    )
+    md.append(charts.to_html(fig, table=pd.DataFrame({"Mes": [mes(m) for m in monthly["resolved_month"]],
+                                                     "Dentro del plazo": [pct(v, 1) for v in monthly["value"]],
+                                                     "Solicitudes cerradas": [n(vol.get(m, 0)) for m in monthly["resolved_month"]]})))  # fmt: skip
 
     fig = charts.bar(
         by_queue["queue"], by_queue["value"],
@@ -194,24 +199,102 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     )  # fmt: skip
     charts.add_target(fig, target, f"Meta {pct(target)}", axis="x", pct=True)
     fig.update_xaxes(range=[0, 112])
+    qvol = rq.groupby("queue").size()
+    fig.update_traces(customdata=[charts.hover_kpi(e.catalog["sla_compliance"], f"Equipo {qq}", vv, qvol.get(qq, 0), "solicitudes cerradas")
+                                  for qq, vv in zip(by_queue["queue"], by_queue["value"], strict=True)],
+                      hovertemplate="%{customdata}<extra></extra>")  # fmt: skip
     md.append(charts.to_html(fig, height=340))
 
-    fig = go.Figure()
-    for i, label in enumerate([b[2] for b in AGE_BUCKETS]):
-        counts = (
-            open_.groupby(["queue", "tramo"], observed=False)
-            .size()
-            .unstack("tramo")
-            .reindex(open_by_queue.sort_values("abiertas", ascending=False).index)
+    # ¿Qué explica el cambio? Cascada de solicitudes fuera de plazo por equipo, del mes A al mes B
+    out_of_time = (
+        resolved[~resolved["within_sla"].astype(bool)]
+        .groupby(["resolved_month", "queue"])
+        .size()
+        .unstack(fill_value=0)
+    )
+    months_ok = [
+        m
+        for m in out_of_time.index
+        if m < (snapshot + pd.Timedelta(minutes=1)).to_period("M").start_time
+    ]
+    if len(months_ok) >= 4:
+        mb_, ma_ = months_ok[-1], months_ok[-4]
+        steps = sorted(
+            (
+                (qq, int(out_of_time.loc[mb_, qq] - out_of_time.loc[ma_, qq]))
+                for qq in out_of_time.columns
+            ),
+            key=lambda x: -abs(x[1]),
         )
-        fig.add_trace(go.Bar(y=counts.index, x=counts[label], name=label, orientation="h", marker_color=theme.ORDINAL[i],
-                             hovertemplate=f"%{{y}} · {label}: %{{x}} solicitudes<extra></extra>"))  # fmt: skip
-    fig.update_layout(barmode="stack", title=theme.title(
-        f"Quedan {n(n_open)} solicitudes abiertas; {n(n_old)} llevan más de {age_limit} días, sobre todo en «{top_open}»",
-        f"Solicitudes abiertas al {fecha(snapshot)}, por equipo y por antigüedad: son los próximos incumplimientos"))  # fmt: skip
-    fig.update_yaxes(autorange="reversed")
-    md.append(charts.to_html(fig, height=360, table=open_by_queue.reset_index().rename(
-        columns={"queue": "Equipo", "abiertas": "Abiertas", "antiguas": f"Con más de {age_limit} días"})))  # fmt: skip
+        main_q = steps[0][0]
+        fig = charts.waterfall(
+            f"{mes(ma_)}", int(out_of_time.loc[ma_].sum()), steps, f"{mes(mb_)}",
+            conclusion=f"De {n(out_of_time.loc[ma_].sum())} a {n(out_of_time.loc[mb_].sum())} solicitudes fuera de plazo al mes: "
+            f"«{main_q}» explica {steps[0][1]:+d}",
+            subtitle=f"Solicitudes cerradas fuera de plazo: {mes(ma_)} frente a {mes(mb_)}, y cuánto aporta cada equipo al cambio",
+            unit_label="solicitudes",
+        )  # fmt: skip
+        md.append(charts.to_html(fig, height=380))
+
+    # Comparar equipos: pequeños múltiples con la misma escala
+    sm = e.compute_by(
+        "sla_compliance",
+        resolved[
+            resolved["resolved_month"]
+            < (snapshot + pd.Timedelta(minutes=1)).to_period("M").start_time
+        ],
+        ["queue", "resolved_month"],
+    )
+    groups = {
+        qq: ([mes(m) for m in g["resolved_month"]], g["value"].tolist())
+        for qq, g in sm.groupby("queue")
+    }
+    fig = charts.small_multiples(
+        e.catalog["sla_compliance"], groups,
+        conclusion=f"Solo «{worst['queue']}» se aleja de la meta; los demás equipos se mantienen cerca de ella" if len(others) and others["value"].min() >= e.catalog["sla_compliance"].thresholds["amber"]
+        else f"«{worst['queue']}» es el que más se aleja de la meta",
+        subtitle="Cumplimiento del plazo por mes, un panel por equipo, todos con la misma escala; la línea punteada es la meta",
+        highlight={worst["queue"]},
+    )  # fmt: skip
+    md.append(charts.to_html(fig, height=460))
+
+    # ¿Cómo se reparte la antigüedad? Histograma por tramos con el límite marcado
+    tramos = open_["tramo"].value_counts().reindex([b[2] for b in AGE_BUCKETS]).fillna(0)
+    colors = [theme.CONTEXT if i < 2 else theme.HIGHLIGHT for i in range(len(tramos))]
+    fig = go.Figure(go.Bar(x=list(tramos.index), y=tramos.values, marker_color=colors, text=[n(v) for v in tramos.values],
+                           textposition="outside", cliponaxis=False,
+                           customdata=[f"{t_} de antigüedad · {n(v)} solicitudes abiertas · {'dentro' if i < 2 else 'fuera'} del límite de {age_limit} días"
+                                       for i, (t_, v) in enumerate(tramos.items())],
+                           hovertemplate="%{customdata}<extra></extra>"))  # fmt: skip
+    fig.add_vline(x=1.5, line=dict(color=theme.INK, width=1.5, dash="dot"))
+    fig.add_annotation(
+        x=1.5,
+        y=1,
+        yref="paper",
+        text=f"límite: {age_limit} días",
+        showarrow=False,
+        xanchor="left",
+        yanchor="top",
+        font=dict(color=theme.INK, size=11),
+    )
+    fig.update_layout(title=theme.title(
+        f"Quedan {n(n_open)} solicitudes abiertas y {n(n_old)} ({pct(n_old / n_open if n_open else 0)}) ya pasaron el límite de {age_limit} días",
+        f"Solicitudes abiertas al {fecha(snapshot)} por antigüedad; a la derecha de la línea están los próximos incumplimientos"))  # fmt: skip
+    fig.update_yaxes(title_text="solicitudes abiertas")
+    md.append(charts.to_html(fig, height=360))
+
+    # ¿Dónde se concentra? Pareto de las pendientes antiguas por equipo
+    aged_q = open_by_queue["antiguas"][open_by_queue["antiguas"] > 0]
+    if len(aged_q):
+        share_top = aged_q.max() / aged_q.sum()
+        fig = charts.pareto(
+            aged_q.index, aged_q.values,
+            conclusion=f"«{aged_q.idxmax()}» concentra {pct(share_top)} de las pendientes antiguas: ahí está el trabajo",
+            subtitle=f"Solicitudes abiertas con más de {age_limit} días por equipo, de mayor a menor, y su porcentaje acumulado",
+            unit_label="pendientes antiguas",
+        )  # fmt: skip
+        md.append(charts.to_html(fig, height=420, table=open_by_queue.reset_index().rename(
+            columns={"queue": "Equipo", "abiertas": "Abiertas", "antiguas": f"Con más de {age_limit} días"})))  # fmt: skip
 
     md.append(
         (
@@ -308,6 +391,9 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
          "Empezar a registrar la primera respuesta y las reaperturas: sin ellas no se puede saber si la rapidez se paga con calidad.",
          "Responsable de calidad del servicio", fecha(review)),
     ]))  # fmt: skip
+    v = get_valores(t, e, manifest)["service"]
+    md.append(seccion_valor(e, v))
+    md.append(seccion_decision(e, v, accion))
     md.append("## Cómo lo seguimos midiendo\n\n")
     md.append(seguimiento(e, [
         ("backlog_aged_share", "Cada semana, por equipo (avisa antes)", "Más de 20 % en un equipo dos semanas seguidas"),

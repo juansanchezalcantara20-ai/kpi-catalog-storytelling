@@ -19,14 +19,19 @@ theme:
     - navigation.sections
     - navigation.top
     - content.code.copy
+    - content.tooltips
     - toc.follow
   icon:
     logo: material/chart-box-outline
 
 extra_css:
   - assets/css/extra.css
+extra_javascript:
+  - assets/js/tooltips.js
+  - assets/js/simulador.js
 
 markdown_extensions:
+  - abbr
   - admonition
   - attr_list
   - md_in_html
@@ -37,8 +42,13 @@ markdown_extensions:
   - pymdownx.superfences
   - pymdownx.highlight
   - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path: [includes]
+      auto_append: [glosario.md]
+      check_paths: true
 
 nav:
+  - Resumen para gerencia: resumen.md
   - Inicio: index.md
   - Casos:
       - 1 · Atención de solicitudes: cases/service.md

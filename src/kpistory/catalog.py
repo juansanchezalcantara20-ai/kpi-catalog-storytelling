@@ -52,6 +52,7 @@ class KPI:
     misreadings: list[str]
     decision: str
     balance: str
+    target_why: str
     related: list[str]
     chart: dict[str, str]
     sql: str | None = None

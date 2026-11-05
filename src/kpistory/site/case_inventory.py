@@ -7,9 +7,11 @@ import plotly.graph_objects as go
 
 from ..data.inventory import MA_WEEKS, N_FADED, N_TOP, ORDER_UP_TO_WEEKS
 from ..engine import Engine
+from ..valor import get_valores
 from ..viz import charts, theme
 from .common import (
     aviso_datos,
+    bloque_bala,
     de_cada_100,
     decisiones,
     detalle_tecnico,
@@ -17,6 +19,8 @@ from .common import (
     n,
     pct,
     pregunta,
+    seccion_decision,
+    seccion_valor,
     seguimiento,
     tiles,
 )
@@ -124,7 +128,23 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         "inventario sin movimiento) tiran en sentidos opuestos. El pronóstico, y sobre todo su **sesgo**, está antes de ambos.\n\n"
     )
 
+    md.append(bloque_bala(e, H, ["otif", "fill_rate", "obsolescence_share", "forecast_bias"]))
     md.append("## Lo que encontramos\n\n")
+    ko = e.catalog["otif"]
+    olm = ol.assign(m=ol["order_date"].dt.to_period("M").dt.start_time)
+    olm = (
+        olm[olm["m"] < end.to_period("M").start_time] if end < end + pd.offsets.MonthEnd(0) else olm
+    )
+    ot = e.compute_by("otif", olm, "m").tail(13)
+    lowm = ot.loc[ot["value"].idxmin()]
+    fig = charts.kpi_trend(
+        ko, [mes(m) for m in ot["m"]], ot["value"].tolist(),
+        conclusion=f"Pedidos completos y a tiempo nunca llegan a la meta; el peor mes fue {mes(lowm['m'])} con {pct(lowm['value'])}"
+        if (ot["value"] < ko.target).all() else f"El peor mes de pedidos completos y a tiempo fue {mes(lowm['m'])} con {pct(lowm['value'])}",
+        subtitle="De cada 100 pedidos del mes, cuántos llegaron completos y a tiempo; verde = zona en meta, amarillo = margen de alerta",
+        events=[(mes(lowm["m"]), "peor mes")], n=olm.groupby("m")["order_id"].nunique().reindex(ot["m"]).tolist(), n_label="pedidos",
+    )  # fmt: skip
+    md.append(charts.to_html(fig, height=380))
     fig = charts.bar(
         list(cats.index), cats.values,
         conclusion=f"Se despacha {pct(H['fill_rate'].value)} de las unidades, pero solo {pct(H['otif'].value)} de los pedidos llega "
@@ -296,6 +316,9 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
             )
         )
     md.append(decisiones(rows))
+    v = get_valores(t, e, manifest)["inventory"]
+    md.append(seccion_valor(e, v))
+    md.append(seccion_decision(e, v, rows[0][0]))
     md.append("## Cómo lo seguimos midiendo\n\n")
     md.append(seguimiento(e, [
         ("forecast_bias", "Cada mes, por tipo de producto (avisa antes)", "Fuera de ± 10 % en un tipo de producto"),

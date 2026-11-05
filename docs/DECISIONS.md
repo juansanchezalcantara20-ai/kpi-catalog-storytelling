@@ -60,3 +60,23 @@ Cada decisión que no es obvia, con su motivo. Están agrupadas por etapa del pr
 | Solo se descargan columnas sin datos personales, y un control falla la publicación si aparece algún dato personal. | Se publican cifras agregadas, nunca direcciones, nombres, teléfonos ni textos de ciudadanos. |
 | La descarga corre en GitHub Actions cada mes y cuando alguien la pide, y solo publica si pasan todas las pruebas. | El entorno de desarrollo no tiene internet; la nube sí, y una actualización que rompe una prueba no llega al sitio. |
 | Si la descarga trae menos filas de las esperadas, se considera fallida y se usa el plan B, avisándolo. | Una descarga incompleta mostraría números equivocados con apariencia de reales. |
+
+## 5 · Explicaciones al pasar el mouse, gráficos que responden y valor en soles
+
+| Decisión | Por qué |
+|---|---|
+| Las explicaciones de cada tarjeta salen en un tooltip propio y accesible: se abre al pasar el mouse, con el teclado o con un toque, y se cierra con Esc. | El atributo de título del navegador no funciona en celulares ni con teclado, y no se puede leer completo. El texto sale del catálogo, nunca escrito a mano. |
+| En el celular, el primer toque abre la explicación y el segundo sigue el enlace. | Si el toque navegara de inmediato, la explicación nunca se vería en el celular. |
+| El tooltip se ubica abajo, arriba o al costado de la tarjeta según el espacio, y nunca sale de la pantalla. | Con tarjetas cerca del borde inferior, una explicación larga quedaba cortada. |
+| Un glosario de siglas se agrega solo a todas las páginas y se muestra al pasar el mouse. | Explicar cada sigla en cada página una sola vez, sin repetir el texto a mano. |
+| Cada gráfico responde una pregunta, y el tipo de gráfico depende de la pregunta: bala para «cuánto falta», Pareto para «dónde se concentra», histograma para «cómo se reparte», cascada para «qué explica el cambio», pequeños múltiples para comparar grupos. | La misma línea para los 28 indicadores no ayudaba a decidir. |
+| Las series de tiempo muestran la zona en meta, el margen de alerta y el evento clave anotado. | El lector ve de un vistazo cuándo empezó el problema y qué tan lejos está. |
+| Todos los gráficos tienen su tabla «Ver datos»; si un gráfico no la trae, se arma sola a partir de sus datos. | Ningún gráfico depende del mouse para leerse, y una prueba lo comprueba. |
+| Los supuestos económicos están en un archivo propio, en soles, todos marcados como ilustrativos y editables en la web. | El método tiene que servir con los números de cualquier empresa; no se usan datos de empleadores, clientes ni sueldos reales. |
+| El costo de una brecha es lineal y nunca negativo: base × distancia a la meta × costo por unidad. Si el indicador ya está en meta, cuesta cero y se dice. | Es fácil de explicar, de revisar y de cambiar; un modelo más complejo escondería los supuestos. |
+| «Decisión → resultado» es un escenario simulado y transparente de seis meses, con y sin la decisión, y un intervalo que responde «¿es ruido?». | Los datos terminan en la fecha de corte; inventar un «después» observado sería falso. Simularlo, y decirlo, muestra el método completo. |
+| El resumen para gerencia es la primera página del menú y la portada del tablero; la portada del sitio muestra el valor total en juego. | Un gerente tiene que salir pensando cuánto le ahorra esto al mes. |
+| La portada, el resumen, los casos y el tablero leen el mismo cálculo de valor, y una prueba verifica que las cifras coinciden. | Igual que con los indicadores: un número, una verdad. |
+| La revisión visual con Playwright (escritorio y celular de 390 px) corre en el entorno de desarrollo y deja capturas en el repositorio; no corre en cada cambio de la nube. | Instalar un navegador completo en cada ejecución es lento; las pruebas de legibilidad, coherencia y gráficos sí corren siempre. |
+| Los nombres de los campos del catálogo siguen en inglés (por ejemplo, el nombre del indicador y su definición corta); sus valores están en español. | Son identificadores internos, como acordamos; el lector nunca los ve. |
+| Al revisar las cifras, el cumplimiento del plazo en el tablero publicado (94.4 %, todo el año) no coincidía con el del caso (89.2 %, último trimestre). Ahora todos muestran el mismo valor de referencia con su periodo. | Era un error de coherencia: dos periodos distintos para la misma tarjeta. |
