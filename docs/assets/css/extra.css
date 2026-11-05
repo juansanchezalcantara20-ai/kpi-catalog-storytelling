@@ -70,3 +70,54 @@
 @media (max-width: 900px) {
   .md-typeset .pair { grid-template-columns: 1fr; }
 }
+.md-typeset .kpi-meaning { font-size: 0.68rem; color: var(--ink); line-height: 1.3; margin-top: 0.2rem; }
+.md-typeset .leyenda { font-size: 0.75rem; color: var(--ink-2); margin: 0.2rem 0 0.4rem; }
+.md-typeset details.tecnico { border-color: #c3c2b7; font-size: 0.72rem; }
+.md-typeset details.tecnico > summary { background: #f4f4f1; }
+.md-typeset details.tecnico > summary::before { background-color: #898781; }
+.md-typeset .admonition.abstract, .md-typeset details.abstract { font-size: 0.8rem; }
+/* --- Tooltips (same look in the site and the dashboard) --- */
+.kpi-tip {
+  position: fixed; z-index: 1000; max-width: min(340px, calc(100vw - 16px)); width: max-content;
+  background: #fff; color: #0b0b0b; border: 1px solid #c3c2b7; border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16); padding: 10px 12px; font-size: 0.68rem; line-height: 1.4;
+  pointer-events: none; text-align: left;
+}
+.kpi-tip[hidden] { display: none; }
+.kpi-tip b { display: block; font-size: 0.72rem; margin-bottom: 4px; }
+.kpi-tip dl { margin: 0; }
+.kpi-tip dt { font-weight: 650; color: #52514e; margin-top: 4px; }
+.kpi-tip dd { margin: 0; }
+.md-typeset .kpi-status[data-tip] { text-decoration: underline dotted; text-underline-offset: 2px; }
+.md-typeset .valor-card { border: 1px solid var(--hairline); border-left: 6px solid var(--kpi-act); border-radius: 8px; padding: 0.9rem 1.1rem; background: var(--surface); margin: 0.8rem 0; }
+.md-typeset .valor-card .grande { font-size: 1.9rem; font-weight: 700; line-height: 1.15; }
+.md-typeset .valor-card .sub { color: var(--ink-2); font-size: 0.78rem; }
+.md-typeset .aviso-supuestos { font-size: 0.7rem; color: var(--ink-2); font-style: italic; }
+.md-typeset .simulador { border: 1px solid var(--hairline); border-radius: 8px; padding: 0.8rem 1rem; background: #f7f7f4; margin: 1rem 0; }
+.md-typeset .simulador label { display: block; font-size: 0.75rem; font-weight: 600; margin-top: 0.4rem; }
+.md-typeset .simulador input[type=range] { width: 100%; }
+.md-typeset .simulador input[type=number] { width: 7rem; padding: 2px 4px; border: 1px solid #c3c2b7; border-radius: 4px; }
+.md-typeset .simulador .resultado { font-size: 1.2rem; font-weight: 700; margin-top: 0.5rem; }
+.md-typeset .simulador .fila { display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; }
+.md-typeset .valor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; }
+@media (max-width: 600px) { .md-typeset .valor-card .grande { font-size: 1.4rem; } }
+
+/* ---------------------------------------------------------------- rubros y temas */
+.md-typeset .kpi-rol {
+  align-self: flex-start; font-size: 0.6rem; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase;
+  padding: 1px 8px; border-radius: 999px; background: #eef2f8; color: #1c5cab; margin-bottom: 2px;
+}
+.md-typeset .kpi-rol.rol-contrapeso { background: #f3f0e8; color: #6b5300; }
+.md-typeset .kpi-rol.rol-adelantados { background: #eaf5ec; color: #11632a; }
+.md-typeset .matriz { overflow-x: auto; margin: 0.6em 0 1em; }
+.md-typeset .matriz table.matriz-tabla { display: table; font-size: 0.6rem; border-collapse: collapse; table-layout: fixed; width: 100%; min-width: 560px; }
+.md-typeset .matriz table.matriz-tabla th:first-child { width: 15%; }
+.md-typeset .matriz table.matriz-tabla th, .md-typeset .matriz table.matriz-tabla td { overflow-wrap: anywhere; hyphens: auto; }
+.md-typeset .matriz th, .md-typeset .matriz td { padding: 6px 6px; vertical-align: top; border-bottom: 1px solid #e6e6e1; }
+.md-typeset .matriz thead th { font-weight: 600; }
+.md-typeset .matriz td.pendiente { color: #8a8a85; font-style: italic; }
+.md-typeset .matriz td.celda-caso { background: #f6f8fc; }
+.md-typeset .contador { font-size: 0.78rem; }
+.md-typeset .caso-ficha { font-size: 0.72rem; color: #55554f; }
+.md-typeset .rubro-selector select { font: inherit; padding: 4px 8px; border-radius: 6px; border: 1px solid #ccc; max-width: 100%; }
+.md-typeset .alertas-rubro ol li { margin-bottom: 0.6em; }

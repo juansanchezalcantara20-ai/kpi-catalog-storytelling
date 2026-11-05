@@ -1,0 +1,178 @@
+# Fuentes de datos públicas. La descarga corre en GitHub Actions (workflow "Actualizar datos").
+# Si una descarga falla, el sitio vuelve a los datos simulados y lo dice en cada página.
+# Ninguna fuente requiere cuenta ni clave de API.
+
+# Campos comunes: nombre, publicador, licencia, pagina (dónde leer sobre la fuente), descarga o api,
+# tipo (real o simulado), rubros y filtros. La fecha de descarga y las filas se registran en cada
+# actualización (data/processed/manifest.json) y se muestran en la página «Fuentes».
+
+solicitudes:
+  # Caso · Atención de solicitudes
+  nombre: "NYC 311 Service Requests"
+  publicador: "NYC Open Data (Ciudad de Nueva York)"
+  licencia: "Términos de uso de NYC Open Data (datos abiertos, uso libre)"
+  tipo: real
+  rubros: [servicios]
+  pagina: "https://data.cityofnewyork.us/Social-Services/311-Service-Requests-from-2010-to-Present/erm2-nwe9"
+  api: "https://data.cityofnewyork.us/resource/erm2-nwe9.csv"
+  # Solo columnas sin datos personales: nunca direcciones, coordenadas ni textos libres.
+  columnas: [unique_key, created_date, closed_date, agency, complaint_type, open_data_channel_type, status, borough]
+  filtros:
+    agencia: "DOT"            # Departamento de Transporte: alumbrado, calzadas, semáforos, veredas
+  periodo:
+    meses: 12                 # 12 meses completos...
+    corte: fin_mes_anterior   # ...que terminan el último día del mes anterior a la descarga
+  paginacion:
+    tamano_pagina: 50000
+    maximo_filas: 800000
+  minimo_filas: 5000          # menos que esto = descarga incompleta -> se usa el plan B
+  reintentos: 4
+  # Supuesto propio (no es una regla oficial de la ciudad): prioridad y plazo según el tipo de solicitud.
+  plazos_por_prioridad_horas:
+    Urgente: 24
+    Alta: 72
+    Media: 168
+    Baja: 336
+  tipos:
+    "Traffic Signal Condition": {etiqueta: "Semáforos", prioridad: Urgente}
+    "Street Light Condition": {etiqueta: "Alumbrado público", prioridad: Alta}
+    "Street Condition": {etiqueta: "Estado de la calzada", prioridad: Alta}
+    "Highway Condition": {etiqueta: "Autopistas", prioridad: Alta}
+    "Bridge Condition": {etiqueta: "Puentes", prioridad: Urgente}
+    "Sidewalk Condition": {etiqueta: "Veredas", prioridad: Media}
+    "Curb Condition": {etiqueta: "Sardineles", prioridad: Media}
+    "Street Sign - Damaged": {etiqueta: "Señales de tránsito", prioridad: Media}
+    "Street Sign - Missing": {etiqueta: "Señales de tránsito", prioridad: Media}
+    "Street Sign - Dangling": {etiqueta: "Señales de tránsito", prioridad: Alta}
+    "Broken Parking Meter": {etiqueta: "Parquímetros", prioridad: Baja}
+    "Broken Muni Meter": {etiqueta: "Parquímetros", prioridad: Baja}
+  tipo_por_defecto: {etiqueta: "Otros", prioridad: Media}
+  maximo_equipos: 5           # los tipos más frecuentes se muestran; el resto va a "Otros"
+  canales:
+    PHONE: "Teléfono"
+    ONLINE: "Web"
+    MOBILE: "App móvil"
+    UNKNOWN: "Otro"
+    OTHER: "Otro"
+
+mantenimiento:
+  nombre: "AI4I 2020 Predictive Maintenance Dataset"
+  publicador: "UCI Machine Learning Repository (Matzka, 2020)"
+  licencia: "CC BY 4.0"
+  pagina: "https://archive.ics.uci.edu/dataset/601/ai4i+2020+predictive+maintenance+dataset"
+  descarga: "https://archive.ics.uci.edu/static/public/601/ai4i+2020+predictive+maintenance+dataset.zip"
+  # El propio publicador lo describe como un conjunto sintético que refleja datos reales de
+  # mantenimiento predictivo: es una referencia pública, no la operación de una mina real.
+  tipo: referencia
+  rubros: [mineria]
+  filtros: "10 000 ciclos de máquina; se agrupan en 20 máquinas y 12 meses"
+
+ventas:
+  nombre: "Online Retail II"
+  publicador: "UCI Machine Learning Repository (Chen, 2019)"
+  licencia: "CC BY 4.0"
+  pagina: "https://archive.ics.uci.edu/dataset/502/online+retail+ii"
+  descarga: "https://archive.ics.uci.edu/static/public/502/online+retail+ii.zip"
+  tipo: real
+  rubros: [retail]
+  filtros: "todas las facturas de dic 2009 a dic 2011; sin nombres de clientes (solo un número)"
+
+energia:
+  nombre: "Energy dataset (generación eléctrica por país y año)"
+  publicador: "Our World in Data (con datos de Ember y del Energy Institute)"
+  licencia: "CC BY 4.0"
+  pagina: "https://github.com/owid/energy-data"
+  descarga: "https://raw.githubusercontent.com/owid/energy-data/master/owid-energy-data.csv"
+  tipo: real
+  rubros: [energia]
+  desde: 2000
+  minimo_filas: 150
+  filtros: "10 países de Sudamérica desde el año 2000"
+
+vacunas:
+  nombre: "COVID-19 vaccinations (personas con esquema completo)"
+  publicador: "Our World in Data (con datos oficiales de cada país; en Perú, el Ministerio de Salud)"
+  licencia: "CC BY 4.0"
+  pagina: "https://github.com/owid/covid-19-data/tree/master/public/data/vaccinations"
+  descarga: "https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/vaccinations/vaccinations.csv"
+  tipo: real
+  rubros: [salud]
+  filtros: "10 países de Sudamérica; la población se deduce de las personas vacunadas y su porcentaje"
+
+mortalidad:
+  nombre: "COVID-19 weekly deaths per million (muertes confirmadas por semana)"
+  publicador: "Our World in Data (con datos de la Organización Mundial de la Salud)"
+  licencia: "CC BY 4.0"
+  pagina: "https://github.com/owid/covid-19-data/tree/master/public/data/cases_deaths"
+  descarga: "https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/cases_deaths/weekly_deaths_per_million.csv"
+  tipo: real
+  rubros: [salud]
+  desde: "2020-03-01"
+  hasta: "2022-12-31"
+  minimo_filas: 800
+  filtros: "10 países de Sudamérica, una fila por semana (domingo, suma de 7 días), mar 2020 a dic 2022"
+
+moviles:
+  nombre: "Mobile phone subscriptions (líneas móviles por cada 100 habitantes)"
+  publicador: "Unión Internacional de Telecomunicaciones, vía Our World in Data; publicado en TidyTuesday (2020-11-10)"
+  licencia: "CC BY 4.0 (Our World in Data); repositorio TidyTuesday bajo CC0"
+  pagina: "https://github.com/rfordatascience/tidytuesday/tree/master/data/2020/2020-11-10"
+  descarga: "https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-11-10/mobile.csv"
+  tipo: real
+  rubros: [telecom]
+  desde: 1995
+  minimo_filas: 150
+  filtros: "10 países de Sudamérica, 1995 a 2017; la población de 2014 a 2017 se extiende con el crecimiento de los cinco años anteriores"
+
+docentes:
+  nombre: "Pupil-teacher ratio (alumnos por docente)"
+  publicador: "Instituto de Estadística de la UNESCO; publicado en TidyTuesday (2019-05-07)"
+  licencia: "Datos abiertos de la UNESCO (CC BY-SA 3.0 IGO); repositorio TidyTuesday bajo CC0"
+  pagina: "https://github.com/rfordatascience/tidytuesday/tree/master/data/2019/2019-05-07"
+  descarga: "https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-05-07/student_teacher_ratio.csv"
+  tipo: real
+  rubros: [educacion]
+  minimo_filas: 60
+  filtros: "10 países de Sudamérica; primaria y los dos ciclos de secundaria"
+
+vuelos:
+  nombre: "Flights 200k (atraso de salida de vuelos comerciales)"
+  publicador: "Oficina de Estadísticas de Transporte de Estados Unidos, reporte obligatorio de puntualidad; muestra publicada por vega-datasets"
+  licencia: "Datos públicos del gobierno de Estados Unidos; repositorio vega-datasets bajo BSD-3"
+  pagina: "https://github.com/vega/vega-datasets"
+  descarga: "https://raw.githubusercontent.com/vega/vega-datasets/main/data/flights-200k.json"
+  tipo: real
+  rubros: [logistica]
+  minimo_filas: 150000
+  filtros: "200 000 vuelos con atraso en minutos, distancia y hora de salida; sin aerolínea ni fecha"
+
+creditos:
+  nombre: "Cartera de créditos por tipo de entidad, segmento y región (simulada)"
+  publicador: "Simulación de este proyecto, semilla 2031"
+  licencia: "MIT (código de este repositorio)"
+  tipo: simulado
+  rubros: [banca]
+  # Se buscó una fuente pública estable: las series de morosidad del Banco Central de Reserva del
+  # Perú (BCRPData) tienen una API abierta, pero no se pudo verificar desde el entorno de
+  # desarrollo; las bases de la Superintendencia se publican en hojas de cálculo sin una dirección
+  # estable. Por eso este caso usa datos simulados y lo dice en cada página.
+  filtros: "24 meses, 4 tipos de entidad, 4 segmentos y 5 regiones"
+  candidata: "https://estadisticas.bcrp.gob.pe/estadisticas/series/api/PN07746EM/json"
+
+# Fuentes que se evaluaron y no se usaron, con el motivo (se muestran en la página «Fuentes»).
+descartadas:
+  - fuente: "Banco Central de Reserva del Perú, series estadísticas (BCRPData)"
+    rubros: [banca, mineria, energia]
+    motivo: "Tiene una interfaz abierta sin clave (morosidad bancaria, producción minera, electricidad), pero su dirección no respondió desde el entorno de desarrollo, así que no se pudo verificar el formato. Queda como candidata."
+  - fuente: "Superintendencia de Banca, Seguros y AFP (estadísticas del sistema financiero)"
+    rubros: [banca]
+    motivo: "Se publica en hojas de cálculo mensuales sin una dirección de descarga estable."
+  - fuente: "Ministerio de Energía y Minas (boletines estadísticos)"
+    rubros: [mineria, energia]
+    motivo: "Se publican en PDF y hojas de cálculo con formato cambiante; no se encontró una descarga estable."
+  - fuente: "Portal de datos abiertos del Perú (reclamos de telecomunicaciones y de salud)"
+    rubros: [telecom, salud]
+    motivo: "No se encontró un archivo con fechas de apertura y cierre que se pueda descargar de forma estable."
+  - fuente: "Kaggle y otras plataformas que piden cuenta"
+    rubros: [banca, telecom, retail]
+    motivo: "Requieren crear una cuenta o una clave de acceso; el proyecto no usa ninguna."

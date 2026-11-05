@@ -1,63 +1,69 @@
-# Data-quality rules per landing dataset (case 5).
+# Reglas de calidad de datos por conjunto de datos tal como llega (caso 5).
 #
-# Measured on the data *as it lands*, before cleaning - that is where defects live.
-# The four dimensions are the catalog KPIs dq_completeness, dq_uniqueness, dq_validity
-# and dq_timeliness; this file only says which columns, keys and rules apply.
-#   required:   columns that downstream KPIs depend on (completeness)
-#   key:        business key that must be unique (uniqueness)
-#   rules:      pandas expressions every row must satisfy (validity)
-#   timeliness: event and load timestamp columns and the allowed delay; null = not measurable
+# Se mide sobre los datos tal como llegan, antes de limpiarlos: ahí viven los defectos.
+# Las cuatro dimensiones son los indicadores dq_completeness, dq_uniqueness, dq_validity y
+# dq_timeliness del catálogo; este archivo solo dice qué columnas, claves y reglas aplican.
+#   required:   columnas de las que dependen los indicadores (completitud)
+#   labels:     nombre en español de cada columna obligatoria (lo que ve el lector)
+#   key:        clave de negocio que no debe repetirse (unicidad)
+#   rules:      expresiones que toda fila debe cumplir; la clave es el nombre en español (validez)
+#   timeliness: columnas del hecho y de la carga y el plazo; null = no se puede medir
 
 datasets:
   tickets:
-    label: Service tickets
+    label: Solicitudes de atención
     feeds: [service]
     required: [ticket_id, created_at, priority, queue, channel, status]
+    labels: {ticket_id: Número de solicitud, created_at: Fecha de apertura, priority: Prioridad, queue: Equipo, channel: Canal, status: Estado}
     key: [ticket_id]
     rules:
-      "resolved after created": "resolved_at.isna() | (resolved_at >= created_at)"
-      "SLA target defined": "sla_target_hours > 0"
-      "status is known": "status.isin(['open', 'resolved'])"
+      "cierre posterior a la apertura": "resolved_at.isna() | (resolved_at >= created_at)"
+      "plazo definido": "sla_target_hours > 0"
+      "estado conocido": "status.isin(['open', 'resolved'])"
     timeliness: {event_col: created_at, loaded_col: logged_at, max_delay_hours: 24}
 
   work_orders:
-    label: Maintenance work orders
+    label: Órdenes de trabajo de mantenimiento
     feeds: [maintenance]
     required: [wo_id, asset_id, wo_type, created_at, labor_hours]
+    labels: {wo_id: Número de orden, asset_id: Máquina, wo_type: Tipo de orden, created_at: Fecha de creación, labor_hours: Horas de trabajo}
     key: [wo_id]
     rules:
-      "labour hours > 0": "labor_hours > 0"
-      "corrective has failure mode": "(wo_type != 'corrective') | failure_mode.notna()"
-      "completed after created": "completed_at.isna() | (completed_at >= created_at)"
+      "horas de trabajo mayores que cero": "labor_hours > 0"
+      "reparación con tipo de falla": "(wo_type != 'corrective') | failure_mode.notna()"
+      "cierre posterior a la creación": "completed_at.isna() | (completed_at >= created_at)"
     timeliness: {event_col: completed_at, loaded_col: logged_at, max_delay_hours: 24}
 
   process_data:
-    label: Process sensor data (AI4I 2020)
+    label: Datos de proceso de máquinas (AI4I 2020)
     feeds: [maintenance]
     required: [UDI, Type, "Air temperature [K]", "Process temperature [K]", "Rotational speed [rpm]", "Torque [Nm]", "Tool wear [min]"]
+    labels: {UDI: Número de registro, Type: Tipo de producto, "Air temperature [K]": Temperatura del aire, "Process temperature [K]": Temperatura del proceso, "Rotational speed [rpm]": Velocidad, "Torque [Nm]": Torque, "Tool wear [min]": Uso de la herramienta}
     key: [UDI]
     rules:
-      "temperatures plausible": "`Air temperature [K]`.between(280, 320) & `Process temperature [K]`.between(285, 330)"
-      "speed and torque positive": "(`Rotational speed [rpm]` > 0) & (`Torque [Nm]` > 0)"
-      "product type known": "Type.isin(['L', 'M', 'H'])"
+      "temperaturas posibles": "`Air temperature [K]`.between(280, 320) & `Process temperature [K]`.between(285, 330)"
+      "velocidad y torque positivos": "(`Rotational speed [rpm]` > 0) & (`Torque [Nm]` > 0)"
+      "tipo de producto conocido": "Type.isin(['L', 'M', 'H'])"
     timeliness: null
 
   transactions:
-    label: Sales transactions (Online Retail II)
+    label: Ventas (Online Retail II)
     feeds: [inventory, customers]
     required: [Invoice, StockCode, Quantity, InvoiceDate, Price, "Customer ID"]
+    labels: {Invoice: Número de factura, StockCode: Código de producto, Quantity: Cantidad, InvoiceDate: Fecha, Price: Precio, "Customer ID": Cliente}
     key: [Invoice, StockCode, Description, Quantity, InvoiceDate, Price, "Customer ID", Country]
     rules:
-      "quantity > 0 unless cancellation": "(Quantity > 0) | Invoice.str.startswith('C')"
-      "price > 0": "Price > 0"
-      "product code (not postage/fees)": "~StockCode.str.upper().isin(['POST', 'DOT', 'M', 'C2', 'BANK CHARGES', 'PADS', 'D', 'CRUK', 'ADJUST', 'AMAZONFEE', 'S', 'B'])"
+      "cantidad mayor que cero salvo anulaciones": "(Quantity > 0) | Invoice.str.startswith('C')"
+      "precio mayor que cero": "Price > 0"
+      "código de producto (no envío ni cargos)": "~StockCode.str.upper().isin(['POST', 'DOT', 'M', 'C2', 'BANK CHARGES', 'PADS', 'D', 'CRUK', 'ADJUST', 'AMAZONFEE', 'S', 'B'])"
     timeliness: null
 
   survey:
-    label: NPS survey responses (simulated)
+    label: Encuesta de recomendación (simulada)
     feeds: [customers]
     required: [response_id, customer_id, score, responded_at]
+    labels: {response_id: Número de respuesta, customer_id: Cliente, score: Nota, responded_at: Fecha de respuesta}
     key: [response_id]
     rules:
-      "score within 0-10": "score.between(0, 10)"
+      "nota entre 0 y 10": "score.between(0, 10)"
     timeliness: {event_col: responded_at, loaded_col: loaded_at, max_delay_hours: 24}

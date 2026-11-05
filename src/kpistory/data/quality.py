@@ -44,7 +44,7 @@ def measure(
                 {"dataset": name, "rule": label, "failed_rows": int((~ok).sum()), "rows": len(df)}
             )
         t = cfg.get("timeliness")
-        if t:
+        if t and t["loaded_col"] in df.columns and df[t["loaded_col"]].notna().any():
             passed, total = timeliness_counts(df.dropna(subset=[t["event_col"]]), **t)
             results.append((name, "timeliness", passed, total))
         else:

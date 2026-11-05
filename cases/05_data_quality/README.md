@@ -1,16 +1,7 @@
-# Case 5 · Data quality as a KPI
+# Caso 5 · Calidad de los datos
 
-Measured on the *landing* data of cases 1-4 (before cleaning), with the rules in
-`kpis/dq_rules.yaml`: required columns, business key, validity rules and the
-timeliness window per dataset.
+Se mide sobre los datos de los casos 1 a 4 **tal como llegan**, antes de limpiarlos, con las reglas de
+`kpis/dq_rules.yaml`: campos obligatorios, clave de negocio, reglas de validez y plazo de carga.
 
-| Dataset | Origin |
-|---|---|
-| Service tickets | synthetic (defects injected, documented in case 1) |
-| Maintenance work orders | synthetic (defects injected, documented in case 2) |
-| Process data (AI4I 2020) | real when downloaded, otherwise plan B |
-| Sales transactions (Online Retail II) | real when downloaded, otherwise plan B with the same kinds of defects |
-| NPS survey | synthetic |
-
-Datasets without a load timestamp (the two public ones) cannot be measured for
-timeliness; the page reports that as a finding instead of inventing a value.
+Los conjuntos sin hora de carga (NYC 311 y los de UCI) no se pueden medir en oportunidad; la página lo dice en vez de
+inventar un valor.

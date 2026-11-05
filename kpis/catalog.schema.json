@@ -3,84 +3,396 @@
   "$id": "kpis/catalog.schema.json",
   "title": "KPI catalog",
   "type": "object",
-  "required": ["version", "cases", "kpis"],
+  "required": [
+    "version",
+    "cases",
+    "kpis"
+  ],
   "additionalProperties": false,
   "properties": {
-    "version": {"const": 1},
+    "version": {
+      "const": 1
+    },
     "cases": {
       "type": "object",
       "minProperties": 1,
       "additionalProperties": {
         "type": "object",
-        "required": ["title", "tables"],
+        "required": [
+          "title",
+          "tables",
+          "rubros",
+          "tema",
+          "resultado",
+          "fuentes",
+          "indicadores"
+        ],
         "additionalProperties": false,
         "properties": {
-          "title": {"type": "string", "minLength": 3},
-          "tables": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+          "title": {
+            "type": "string",
+            "minLength": 3
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "rubros": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "tema": {
+            "type": "string"
+          },
+          "resultado": {
+            "enum": [
+              "observado",
+              "estimado"
+            ]
+          },
+          "fuentes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "evento": {
+            "type": "object",
+            "required": [
+              "fecha",
+              "grupo",
+              "texto",
+              "fuentes"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "fecha": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              "grupo": {
+                "type": "string"
+              },
+              "texto": {
+                "$ref": "#/$defs/text"
+              },
+              "fuentes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^https://"
+                },
+                "minItems": 1
+              }
+            }
+          },
+          "indicadores": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "resultado": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "adelantados": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "contrapeso": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "pendientes": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "resultado": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "adelantados": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "contrapeso": {
+                    "$ref": "#/$defs/text"
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
-    "kpis": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/kpi"}}
+    "kpis": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/kpi"
+      }
+    }
   },
   "$defs": {
-    "text": {"type": "string", "minLength": 10},
+    "text": {
+      "type": "string",
+      "minLength": 10
+    },
     "kpi": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "case", "question", "definition", "formula", "unit", "granularity",
-                   "direction", "target", "thresholds", "owner", "source", "input", "how_to_read",
-                   "misreadings", "related", "chart"],
+      "required": [
+        "id",
+        "name",
+        "case",
+        "question",
+        "meaning",
+        "definition",
+        "calculation",
+        "formula",
+        "unit",
+        "granularity",
+        "direction",
+        "target",
+        "thresholds",
+        "owner",
+        "source",
+        "input",
+        "how_to_read",
+        "misreadings",
+        "decision",
+        "balance",
+        "target_why",
+        "related",
+        "chart",
+        "tema",
+        "rubros"
+      ],
       "properties": {
-        "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
-        "name": {"type": "string", "minLength": 3},
-        "case": {"type": "string"},
-        "question": {"type": "string", "pattern": "\\?$"},
-        "definition": {"$ref": "#/$defs/text"},
-        "formula": {"type": "string", "minLength": 5},
-        "unit": {"enum": ["percent", "hours", "days", "times_per_year", "score"]},
-        "granularity": {"$ref": "#/$defs/text"},
-        "direction": {"enum": ["higher_is_better", "lower_is_better", "target_range"]},
-        "target": {"type": "number"},
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 3
+        },
+        "case": {
+          "type": "string"
+        },
+        "question": {
+          "type": "string",
+          "pattern": "¿.*\\?$"
+        },
+        "definition": {
+          "$ref": "#/$defs/text"
+        },
+        "meaning": {
+          "$ref": "#/$defs/text"
+        },
+        "calculation": {
+          "$ref": "#/$defs/text"
+        },
+        "decision": {
+          "$ref": "#/$defs/text"
+        },
+        "balance": {
+          "$ref": "#/$defs/text"
+        },
+        "target_why": {
+          "$ref": "#/$defs/text"
+        },
+        "formula": {
+          "type": "string",
+          "minLength": 5
+        },
+        "unit": {
+          "enum": [
+            "percent",
+            "hours",
+            "days",
+            "times_per_year",
+            "score",
+            "g_per_kwh",
+            "per_million",
+            "per_100",
+            "ratio"
+          ]
+        },
+        "granularity": {
+          "$ref": "#/$defs/text"
+        },
+        "direction": {
+          "enum": [
+            "higher_is_better",
+            "lower_is_better",
+            "target_range"
+          ]
+        },
+        "target": {
+          "type": "number"
+        },
         "thresholds": {
           "type": "object",
-          "required": ["green", "amber"],
+          "required": [
+            "green",
+            "amber"
+          ],
           "additionalProperties": false,
           "properties": {
-            "green": {"$ref": "#/$defs/bound"},
-            "amber": {"$ref": "#/$defs/bound"}
+            "green": {
+              "$ref": "#/$defs/bound"
+            },
+            "amber": {
+              "$ref": "#/$defs/bound"
+            }
           }
         },
-        "params": {"type": "object", "additionalProperties": {"type": ["number", "string"]}},
-        "owner": {"type": "string", "minLength": 3},
-        "source": {"type": "string", "minLength": 3},
+        "params": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 3
+        },
+        "source": {
+          "type": "string",
+          "minLength": 3
+        },
         "input": {
           "type": "object",
-          "required": ["table", "columns"],
+          "required": [
+            "table",
+            "columns"
+          ],
           "additionalProperties": false,
           "properties": {
-            "table": {"type": "string"},
-            "columns": {"type": "array", "items": {"type": "string"}}
+            "table": {
+              "type": "string"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
-        "how_to_read": {"$ref": "#/$defs/text"},
-        "misreadings": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/text"}},
-        "related": {"type": "array", "items": {"type": "string"}},
+        "how_to_read": {
+          "$ref": "#/$defs/text"
+        },
+        "misreadings": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/text"
+          }
+        },
+        "related": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "chart": {
           "type": "object",
-          "required": ["type", "why"],
+          "required": [
+            "type",
+            "why"
+          ],
           "additionalProperties": false,
           "properties": {
-            "type": {"enum": ["line", "bar", "bullet", "histogram", "boxplot", "heatmap", "scatter"]},
-            "why": {"$ref": "#/$defs/text"}
+            "type": {
+              "enum": [
+                "line",
+                "bar",
+                "bullet",
+                "histogram",
+                "boxplot",
+                "heatmap",
+                "scatter",
+                "pareto",
+                "waterfall",
+                "small_multiples"
+              ]
+            },
+            "why": {
+              "$ref": "#/$defs/text"
+            }
           }
         },
-        "sql": {"type": "string", "minLength": 5}
+        "sql": {
+          "type": "string",
+          "minLength": 5
+        },
+        "tema": {
+          "type": "string"
+        },
+        "rubros": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "metas_por_rubro": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "target",
+              "green",
+              "amber",
+              "why"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "target": {
+                "type": "number"
+              },
+              "green": {
+                "type": "number"
+              },
+              "amber": {
+                "type": "number"
+              },
+              "why": {
+                "$ref": "#/$defs/text"
+              }
+            }
+          }
+        }
       }
     },
     "bound": {
       "oneOf": [
-        {"type": "number"},
-        {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}
+        {
+          "type": "number"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        }
       ]
     }
   }

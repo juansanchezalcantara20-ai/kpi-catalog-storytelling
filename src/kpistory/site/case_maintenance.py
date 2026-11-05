@@ -1,4 +1,4 @@
-"""Case 2 page - Maintenance & asset reliability."""
+"""Caso 2 - Mantenimiento de equipos."""
 
 from __future__ import annotations
 
@@ -7,286 +7,302 @@ import plotly.graph_objects as go
 
 from ..data.maintenance import FAILURE_LABEL, N_MACHINES, RUN_HOURS
 from ..engine import Engine
+from ..valor import get_valores
 from ..viz import charts, theme
-from .common import Tile, monitoring_table, pct, question, source_note, tiles
+from .common import (
+    aviso_datos,
+    bloque_bala,
+    decisiones,
+    detalle_tecnico,
+    en_30_segundos,
+    n,
+    pct,
+    pregunta,
+    seccion_decision,
+    seccion_valor,
+    seguimiento,
+    tiles,
+)
+from .current import fecha, headline, mes
+from .plantilla import ficha
 
-TOOL_CHANGE_AT = 190  # minutes; proposed condition-based tool change
+TOOL_CHANGE_AT = 190  # minutes of tool wear: proposed condition-based tool change
 LONG_REPAIR_H = 12
 
 
 def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     runs, wo, ap = t["runs"], t["work_orders"], t["asset_periods"]
     corr = wo[wo["wo_type"].eq("corrective")]
+    H = headline(t, e, manifest)
     a_target = e.catalog["availability"].target
-
-    v = {
-        "availability": e.compute("availability", ap),
-        "mtbf": e.compute("mtbf", ap),
-        "mttr": e.compute("mttr", wo),
-        "pm_compliance": e.compute("pm_compliance", wo),
-        "planned_work_share": e.compute("planned_work_share", wo),
-    }
+    amber = e.catalog["availability"].thresholds["amber"]
     by_asset = pd.DataFrame(
         {
             "availability": e.compute_by("availability", ap, "asset_id").set_index("asset_id")["value"],
             "mtbf": e.compute_by("mtbf", ap, "asset_id").set_index("asset_id")["value"],
-            "mttr": e.compute_by("mttr", wo[wo["wo_type"].eq("corrective")], "asset_id").set_index("asset_id")["value"],
+            "mttr": e.compute_by("mttr", corr, "asset_id").set_index("asset_id")["value"],
             "pm_compliance": e.compute_by("pm_compliance", wo[wo["wo_type"].eq("preventive")], "asset_id").set_index("asset_id")["value"],
             "failures": ap.groupby("asset_id")["failures"].sum(),
             "downtime_h": ap.groupby("asset_id")["unplanned_downtime_hours"].sum(),
         }
     )  # fmt: skip
-    av_sorted = by_asset.sort_values("availability")
-    below = av_sorted[av_sorted["availability"] < a_target]
-    amber = e.catalog["availability"].thresholds["amber"]
-    worst_ids = list(av_sorted.index[av_sorted["availability"] < amber]) or list(
-        av_sorted.index[:1]
-    )
-    worst_share_down = by_asset.loc[worst_ids, "downtime_h"].sum() / by_asset["downtime_h"].sum()
-
-    md = [
-        "# Case 2 · Maintenance & asset reliability\n",
-        source_note(manifest, ["process_data", "work_orders"]),
-    ]
-    md.append(
-        "## Context\n\n"
-        f"A plant runs **{N_MACHINES} machines** in two shifts. The process data has one record per "
-        f"{RUN_HOURS:.0f}-hour production run with the machine's temperatures, speed, torque, tool wear and "
-        f"failure flags ({len(runs):,} runs in 2024). Every failure opens a corrective work order; each machine "
-        "also has a weekly preventive maintenance (PM) routine.\n\n"
-    )
-    md.append("## Question\n\n" + question(
-        "Why is availability below target - is it a reliability problem (we fail too often) or a repair "
-        "problem (we take too long to fix)? And what can we plan instead of react to?"
-    ))  # fmt: skip
-    md.append("## KPIs · 2024\n\n")
-    md.append(
-        tiles(
-            e,
-            [
-                Tile(
-                    "availability",
-                    v["availability"],
-                    f"{len(below)} of {N_MACHINES} machines below target",
-                ),
-                Tile("mtbf", v["mtbf"], f"{int(ap['failures'].sum())} failures"),
-                Tile("mttr", v["mttr"], f"median {corr['repair_hours'].median():.1f} h"),
-                Tile("pm_compliance", v["pm_compliance"], "weekly PM, 3-day tolerance"),
-                Tile("planned_work_share", v["planned_work_share"], "share of labour hours"),
-            ],
-        )
-    )
-    md.append(
-        "Availability is the outcome operations feels. It decomposes into **MTBF** (how often we fail) and "
-        "**MTTR** (how long we are down per failure): availability ≈ MTBF / (MTBF + MTTR). PM compliance and "
-        "planned share are the **leading** side: they move before failures do.\n\n"
-    )
-
-    md.append("## Finding\n\n")
-    names = ", ".join(worst_ids)
-    fig = charts.bar(
-        av_sorted.index, av_sorted["availability"],
-        conclusion=f"{len(worst_ids)} of {N_MACHINES} machines are below {pct(amber)} and carry "
-        f"{pct(worst_share_down)} of all unplanned downtime",
-        subtitle=f"Availability by machine, 2024 (axis starts at 75%) - target {pct(a_target)}",
-        highlight=set(worst_ids), text=[pct(x, 1) for x in av_sorted["availability"]],
-    )  # fmt: skip
-    charts.add_target(fig, a_target, f"Target {pct(a_target)}", axis="x")
-    fig.update_xaxes(range=[0.75, 1.0])
-    md.append(charts.to_html(fig, height=420, table=by_asset.reset_index().round(3)))
-    md.append(
-        "*Note: this bar chart does not start at zero on purpose - all machines are between 75% and 100% and the "
-        "decision is about the gap to target; the axis start is stated in the subtitle.*\n\n"
-    )
-
+    av = by_asset.sort_values("availability")
+    worst = list(av.index[av["availability"] < amber]) or list(av.index[:1])
+    worst_down = by_asset.loc[worst, "downtime_h"].sum() / by_asset["downtime_h"].sum()
+    names = ", ".join(worst)
     med_mtbf, med_mttr = by_asset["mtbf"].median(), by_asset["mttr"].median()
-    # Classify each low-availability machine by which side of the identity is worse than the fleet.
-    gap_mtbf = by_asset["mtbf"] / med_mtbf  # < 1 = fails more often than the median machine
-    gap_mttr = by_asset["mttr"] / med_mttr  # > 1 = slower to repair than the median machine
-    reliability = [m for m in worst_ids if 1 / gap_mtbf[m] >= gap_mttr[m]]
-    repair = [m for m in worst_ids if m not in reliability]
-    parts = []
-    if reliability:
-        parts.append(
-            f"{', '.join(reliability)} fail{'s' if len(reliability) == 1 else ''} far more often"
-        )
-    if repair:
-        parts.append(f"{', '.join(repair)} take{'s' if len(repair) == 1 else ''} longer to repair")
-    diagnosis = (
-        "; ".join(parts) + " - two different problems"
-        if reliability and repair
-        else "; ".join(parts)
-    )
-    fig = go.Figure()
-    colors = [theme.HIGHLIGHT if m in worst_ids else theme.CONTEXT_DARK for m in by_asset.index]
-    fig.add_trace(go.Scatter(
-        x=by_asset["mtbf"], y=by_asset["mttr"], mode="markers+text", text=by_asset.index, textposition="top center",
-        marker=dict(size=13, color=colors, line=dict(color=theme.SURFACE, width=2)), textfont=dict(color=theme.INK_2),
-        hovertemplate="%{text}<br>MTBF %{x:.0f} h<br>MTTR %{y:.1f} h<extra></extra>"))  # fmt: skip
-    fig.add_vline(x=med_mtbf, line=dict(color=theme.AXIS, width=1))
-    fig.add_hline(y=med_mttr, line=dict(color=theme.AXIS, width=1))
-    for x, y, txt, xa, ya in [
-        (by_asset["mtbf"].min(), by_asset["mttr"].max(), "fails often, slow to fix", "left", "top"),
-        (
-            by_asset["mtbf"].max(),
-            by_asset["mttr"].min(),
-            "reliable, quick to fix",
-            "right",
-            "bottom",
-        ),
-    ]:
-        fig.add_annotation(
-            x=x,
-            y=y,
-            text=txt,
-            showarrow=False,
-            xanchor=xa,
-            yanchor=ya,
-            font=dict(color=theme.MUTED, size=11),
-        )
-    fig.update_layout(title=theme.title(
-        diagnosis,
-        "Each dot is a machine: MTBF (h, right is better) vs MTTR (h, lower is better); lines = fleet medians"))  # fmt: skip
-    fig.update_xaxes(
-        title_text="MTBF (hours)", rangemode="normal", showgrid=True, gridcolor=theme.GRID
-    )
-    fig.update_yaxes(title_text="MTTR (hours)", rangemode="normal")
-    md.append(charts.to_html(fig, height=420))
-
+    gap_mtbf, gap_mttr = by_asset["mtbf"] / med_mtbf, by_asset["mttr"] / med_mttr
+    falla_mucho = [m for m in worst if 1 / gap_mtbf[m] >= gap_mttr[m]]
+    repara_lento = [m for m in worst if m not in falla_mucho]
     modes = corr["failure_label"].value_counts()
     top_mode = modes.index[0]
-    tool_related = corr["failure_mode"].isin(["TWF", "OSF"]).mean()
-    fig = charts.bar(
-        modes.index, modes.values,
-        conclusion=f"{top_mode} is the first failure mode ({pct(modes.iloc[0] / modes.sum())}); "
-        f"tool-related modes add {pct(tool_related)}",
-        subtitle="Corrective work orders by failure mode, 2024",
-        highlight={top_mode, FAILURE_LABEL["TWF"], FAILURE_LABEL["OSF"]}, xformat=",.0f",
-        text=[f"{n}" for n in modes.values],
-    )  # fmt: skip
-    md.append(charts.to_html(fig, height=320))
-
-    wear = runs.assign(bucket=(runs["Tool wear [min]"] // 25 * 25).clip(upper=225))
-    rate = wear.groupby("bucket")["failure_mode"].apply(lambda s: s.notna().mean())
-    labels = [f"{int(b)}-{int(b) + 24}" if b < 225 else "225+" for b in rate.index]
+    tool_share = corr["failure_mode"].isin(["TWF", "OSF"]).mean()
+    wear = runs.assign(tramo=(runs["Tool wear [min]"] // 25 * 25).clip(upper=225))
+    rate = wear.groupby("tramo")["failure_mode"].apply(lambda s: s.notna().mean())
     hi, lo = wear[wear["Tool wear [min]"] >= 200], wear[wear["Tool wear [min]"] < 200]
     ratio = hi["failure_mode"].notna().mean() / lo["failure_mode"].notna().mean()
-    fig = charts.bar(
-        labels, rate.values,
-        conclusion=f"A run with more than 200 min of tool wear is {ratio:.1f}x as likely to end in a failure",
-        subtitle="Share of runs ending in a failure, by tool wear at the start of the run (minutes)",
-        highlight={lab for lab, b in zip(labels, rate.index, strict=True) if b >= 200},
-        horizontal=False, xformat=".1%", text=[pct(x, 1) for x in rate.values],
-    )  # fmt: skip
-    fig.update_xaxes(title_text="tool wear (min)")
-    md.append(charts.to_html(fig, height=360))
-
-    fail_runs = runs[
+    avoid = runs[
         runs["failure_mode"].isin(["TWF", "OSF"]) & (runs["Tool wear [min]"] >= TOOL_CHANGE_AT)
     ]
-    n_avoid = len(fail_runs)
-    avoid_hours = (
-        n_avoid * corr.loc[corr["failure_mode"].isin(["TWF", "OSF"]), "repair_hours"].median()
+    avoid_h = (
+        len(avoid) * corr.loc[corr["failure_mode"].isin(["TWF", "OSF"]), "repair_hours"].median()
     )
-
-    mean, median = corr["repair_hours"].mean(), corr["repair_hours"].median()
+    mean_r, med_r = corr["repair_hours"].mean(), corr["repair_hours"].median()
+    long_n = int((corr["repair_hours"] > LONG_REPAIR_H).sum())
     long_share = (
         corr.loc[corr["repair_hours"] > LONG_REPAIR_H, "repair_hours"].sum()
         / corr["repair_hours"].sum()
     )
-    long_n = int((corr["repair_hours"] > LONG_REPAIR_H).sum())
-    fig = go.Figure(go.Histogram(x=corr["repair_hours"], xbins=dict(start=0, size=1), marker_color=theme.CONTEXT,
-                                 hovertemplate="%{x} h: %{y} repairs<extra></extra>"))  # fmt: skip
-    for x, label, color, pos in ((median, f"median {median:.1f} h", theme.INK_2, "top left"),
-                                 (mean, f"mean = MTTR {mean:.1f} h", theme.HIGHLIGHT, "top right")):  # fmt: skip
-        fig.add_vline(
-            x=x,
-            line=dict(color=color, width=2),
-            annotation=dict(text=label, font=dict(color=color)),
-            annotation_position=pos,
-        )
-    fig.add_annotation(x=corr["repair_hours"].quantile(0.97), y=3, text=f"{long_n} repairs > {LONG_REPAIR_H} h (waiting for parts)",
-                       showarrow=True, arrowhead=0, ax=0, ay=-60, font=dict(color=theme.INK))  # fmt: skip
-    fig.update_layout(title=theme.title(
-        f"MTTR is {mean:.1f} h, but the typical repair takes {median:.1f} h: {long_n} waits for parts "
-        f"carry {pct(long_share)} of all repair hours",
-        "Corrective work orders by repair duration (1-hour bins)"))  # fmt: skip
-    fig.update_xaxes(title_text="repair hours")
-    fig.update_yaxes(title_text="work orders")
-    md.append(charts.to_html(fig, height=380))
-
     pm = by_asset["pm_compliance"].sort_values()
     pm_red = [m for m in pm.index if e.status("pm_compliance", pm[m]) == "red"]
-    pm_rest = pm.drop(pm_red)
+    end = pd.Timestamp(ap["month"].max()) + pd.offsets.MonthEnd(0)
+
+    md = ["# Mantenimiento: ¿por qué las máquinas no están disponibles cuando se necesitan?\n",
+          ficha("maintenance", manifest) + aviso_datos(manifest, ["process_data", "work_orders"])]  # fmt: skip
+    md.append(en_30_segundos(
+        f"La flota estuvo disponible {pct(H['availability'].value, 1)} del tiempo programado (meta {pct(a_target)}). "
+        f"{len(worst)} de {N_MACHINES} máquinas ({names}) explican {pct(worst_down)} de las horas perdidas por fallas.",
+        f"Una herramienta con más de 200 minutos de uso hace {ratio:.1f} veces más probable una falla: es una causa "
+        "que se puede planificar en vez de sufrir.",
+        f"Cambiar la herramienta a los {TOOL_CHANGE_AT} minutos de uso, analizar la causa en las máquinas que fallan "
+        "más y tener repuestos críticos en almacén.",
+    ))  # fmt: skip
+    md.append(
+        "## Problema\n\n"
+        f"Una planta opera **{N_MACHINES} máquinas** en dos turnos. Cada registro de los datos de proceso es una corrida "
+        f"de producción de {RUN_HOURS:.0f} horas con la temperatura, la velocidad, el torque, el desgaste de la "
+        f"herramienta y si hubo falla ({n(len(runs))} corridas). Cada falla abre una orden de reparación y cada máquina "
+        "tiene un mantenimiento preventivo semanal.\n\n"
+    )
+    md.append("### La pregunta del negocio\n\n" + pregunta(
+        "¿Por qué la disponibilidad está bajo la meta: porque las máquinas fallan mucho o porque tardamos en repararlas?"))  # fmt: skip
+    md.append("## Indicadores\n\n")
+    md.append(tiles(e, H, ["availability", "mtbf", "mttr", "pm_compliance", "planned_work_share"]))
+    md.append(
+        "La disponibilidad es el resultado. Depende de dos cosas: **cada cuánto falla** una máquina (tiempo entre "
+        "fallas) y **cuánto tarda en volver** (tiempo de reparación). El cumplimiento del preventivo y el trabajo "
+        "planificado avisan antes: se mueven semanas antes que las fallas.\n\n"
+    )
+
+    md.append(bloque_bala(e, H, ["availability", "mtbf", "mttr", "pm_compliance"]))
+    md.append("## Análisis\n\n")
+    ka = e.catalog["availability"]
+    av_m = e.compute_by("availability", ap, "month")
+    below_m = av_m[av_m["value"] < a_target]
+    first_m = below_m["month"].min() if len(below_m) else None
+    worst_m = av_m.loc[av_m["value"].idxmin()]
+    fig = charts.kpi_trend(
+        ka, [mes(m) for m in av_m["month"]], av_m["value"].tolist(),
+        conclusion=f"La flota está bajo la meta casi todo el año; el peor mes fue {mes(worst_m['month'])} con {pct(worst_m['value'], 1)}"
+        if len(below_m) > len(av_m) / 2 else f"La disponibilidad cae bajo la meta en {len(below_m)} de {len(av_m)} meses",
+        subtitle="Disponibilidad de toda la flota por mes; verde = zona en meta, amarillo = margen de alerta (el eje empieza en 80 %)",
+        events=[(mes(worst_m["month"]), "peor mes")] + ([(mes(first_m), "aquí empezó")] if first_m is not None and first_m != worst_m["month"] else []),
+        n=ap.groupby("month")["failures"].sum().reindex(av_m["month"]).tolist(), n_label="fallas", y_range=(80, 100.5),
+    )  # fmt: skip
+    md.append(charts.to_html(fig, height=380))
+    sm = e.compute_by("availability", ap, ["asset_id", "month"])
+    groups = {
+        a_: ([mes(m) for m in g["month"]], g["value"].tolist()) for a_, g in sm.groupby("asset_id")
+    }
+    fig = charts.small_multiples(
+        ka, groups, cols=5,
+        conclusion=f"Las caídas no son de toda la flota: se concentran en {', '.join(worst)}",
+        subtitle="Disponibilidad por mes, un panel por máquina, todos con la misma escala; la línea punteada es la meta",
+        highlight=set(worst),
+    )  # fmt: skip
+    md.append(charts.to_html(fig, height=440))
+    fig = charts.bar(
+        av.index, av["availability"],
+        conclusion=f"{len(worst)} de {N_MACHINES} máquinas están bajo {pct(amber)} y concentran {pct(worst_down)} de las horas perdidas",
+        subtitle=f"Disponibilidad por máquina (el eje empieza en 75 %); meta {pct(a_target)}",
+        highlight=set(worst), pct=True, text=[pct(x, 1) for x in av["availability"]],
+    )  # fmt: skip
+    charts.add_target(fig, a_target, f"Meta {pct(a_target)}", axis="x", pct=True)
+    fig.update_xaxes(range=[75, 100])
+    md.append(charts.to_html(fig, height=420, table=pd.DataFrame({
+        "Máquina": by_asset.index, "Disponibilidad": [pct(v, 1) for v in by_asset["availability"]],
+        "Horas entre fallas": [f"{v:.0f} h" for v in by_asset["mtbf"]], "Horas de reparación": [f"{v:.1f} h" for v in by_asset["mttr"]],
+        "Fallas": by_asset["failures"].astype(int), "Horas perdidas": [f"{v:.0f} h" for v in by_asset["downtime_h"]]})))  # fmt: skip
+    md.append(
+        "*Este gráfico de barras no empieza en cero a propósito: todas las máquinas están entre 75 % y 100 % y la decisión es sobre la distancia a la meta. Lo dice el subtítulo.*\n\n"
+    )
+
+    parts = []
+    if falla_mucho:
+        parts.append(f"{', '.join(falla_mucho)} fallan mucho más seguido")
+    if repara_lento:
+        parts.append(f"{', '.join(repara_lento)} tardan más en repararse")
+    diag = "; ".join(parts) + (
+        ": son dos problemas distintos" if falla_mucho and repara_lento else ""
+    )
+    fig = go.Figure(go.Scatter(
+        x=by_asset["mtbf"], y=by_asset["mttr"], mode="markers+text", text=by_asset.index, textposition="top center",
+        marker=dict(size=13, color=[theme.HIGHLIGHT if m in worst else theme.CONTEXT_DARK for m in by_asset.index],
+                    line=dict(color=theme.SURFACE, width=2)), textfont=dict(color=theme.INK_2),
+        hovertemplate="%{text}<br>entre fallas %{x:.0f} h<br>reparación %{y:.1f} h<extra></extra>"))  # fmt: skip
+    fig.add_vline(x=med_mtbf, line=dict(color=theme.AXIS, width=1))
+    fig.add_hline(y=med_mttr, line=dict(color=theme.AXIS, width=1))
+    fig.add_annotation(x=by_asset["mtbf"].min(), y=by_asset["mttr"].max(), text="falla seguido y tarda en repararse",
+                       showarrow=False, xanchor="left", yanchor="top", font=dict(color=theme.MUTED, size=11))  # fmt: skip
+    fig.add_annotation(x=by_asset["mtbf"].max(), y=by_asset["mttr"].min(), text="confiable y rápida de reparar",
+                       showarrow=False, xanchor="right", yanchor="bottom", font=dict(color=theme.MUTED, size=11))  # fmt: skip
+    fig.update_layout(title=theme.title(diag[0].upper() + diag[1:],
+        "Cada punto es una máquina: horas entre fallas (más a la derecha es mejor) y horas de reparación (más abajo es mejor); las líneas son la mediana de la flota"))  # fmt: skip
+    fig.update_xaxes(
+        title_text="horas de operación entre fallas", showgrid=True, gridcolor=theme.GRID
+    )
+    fig.update_yaxes(title_text="horas por reparación", rangemode="normal")
+    md.append(charts.to_html(fig, height=420))
+
+    fig = charts.bar(
+        modes.index, modes.values,
+        conclusion=f"«{top_mode}» es la falla más frecuente ({pct(modes.iloc[0] / modes.sum())}); las fallas ligadas a la herramienta suman otro {pct(tool_share)}",
+        subtitle="Órdenes de reparación por tipo de falla",
+        highlight={top_mode, FAILURE_LABEL["TWF"], FAILURE_LABEL["OSF"]}, decimals=0, suffix="", text=[n(v) for v in modes.values],
+    )  # fmt: skip
+    md.append(charts.to_html(fig, height=320))
+
+    labels = [f"{int(b)} a {int(b) + 24}" if b < 225 else "225 o más" for b in rate.index]
+    fig = charts.bar(
+        labels, rate.values,
+        conclusion=f"Con más de 200 minutos de uso de la herramienta, una corrida tiene {ratio:.1f} veces más probabilidad de terminar en falla",
+        subtitle="De cada 100 corridas, cuántas terminaron en falla, según los minutos de uso de la herramienta al empezar",
+        highlight={lab for lab, b in zip(labels, rate.index, strict=True) if b >= 200}, pct=True, horizontal=False,
+        text=[pct(x, 1) for x in rate.values],
+    )  # fmt: skip
+    fig.update_xaxes(title_text="minutos de uso de la herramienta")
+    md.append(charts.to_html(fig, height=360))
+
+    fig = go.Figure(go.Histogram(x=corr["repair_hours"], xbins=dict(start=0, size=1), marker_color=theme.CONTEXT,
+                                 hovertemplate="%{x} h: %{y} reparaciones<extra></extra>"))  # fmt: skip
+    fig.add_vline(
+        x=med_r,
+        line=dict(color=theme.INK_2, width=2),
+        annotation=dict(text=f"típica {med_r:.1f} h", font=dict(color=theme.INK_2)),
+        annotation_position="top left",
+    )
+    fig.add_vline(
+        x=mean_r,
+        line=dict(color=theme.HIGHLIGHT, width=2),
+        annotation=dict(text=f"promedio {mean_r:.1f} h", font=dict(color=theme.HIGHLIGHT)),
+        annotation_position="top right",
+    )
+    fig.add_annotation(x=corr["repair_hours"].quantile(0.97), y=3, text=f"{long_n} reparaciones de más de {LONG_REPAIR_H} h (esperando repuestos)",
+                       showarrow=True, arrowhead=0, ax=0, ay=-60, font=dict(color=theme.INK))  # fmt: skip
+    fig.update_layout(title=theme.title(
+        f"La reparación promedio dura {mean_r:.1f} h pero la típica {med_r:.1f} h: {long_n} esperas de repuestos suman {pct(long_share)} de las horas de reparación",
+        "Órdenes de reparación según su duración (barras de 1 hora)"))  # fmt: skip
+    fig.update_xaxes(title_text="horas de reparación")
+    fig.update_yaxes(title_text="reparaciones")
+    md.append(charts.to_html(fig, height=380))
+
+    rest = pm.drop(pm_red)
     fig = charts.bar(
         pm.index, pm.values,
-        conclusion=(f"The crews of {', '.join(pm_red)} complete only {pct(pm[pm_red].mean())} of PMs on time; "
-                    f"the rest {pct(pm_rest.min())}-{pct(pm_rest.max())}") if pm_red else "Every crew completes its PMs on time",
-        subtitle="Preventive maintenance done within 3 days of the due date, by machine, 2024",
-        highlight=set(pm_red), text=[pct(x) for x in pm.values],
+        conclusion=(f"Las cuadrillas de {', '.join(pm_red)} hacen a tiempo solo {pct(pm[pm_red].mean())} de los preventivos; las demás, al menos {pct(rest.min())}")
+        if pm_red else "Todas las cuadrillas hacen sus preventivos a tiempo",
+        subtitle="Preventivos hechos hasta 3 días después de la fecha programada, por máquina",
+        highlight=set(pm_red), pct=True, text=[pct(x) for x in pm.values],
     )  # fmt: skip
     charts.add_target(
         fig,
         e.catalog["pm_compliance"].target,
-        f"Target {pct(e.catalog['pm_compliance'].target)}",
+        f"Meta {pct(e.catalog['pm_compliance'].target)}",
         axis="x",
+        pct=True,
     )
-    fig.update_xaxes(range=[0, 1.1])
+    fig.update_xaxes(range=[0, 110])
     md.append(charts.to_html(fig, height=400))
 
-    worst_mode = corr[corr["asset_id"].isin(worst_ids)]["failure_label"].value_counts()
-    rel_modes = corr[corr["asset_id"].isin(reliability)]["failure_label"].value_counts()
-    rel_mode = rel_modes.index[0] if len(rel_modes) else worst_mode.index[0]
+    wm = corr[corr["asset_id"].isin(worst)]["failure_label"].value_counts()
     md.append(
-        f"**Reading it together.** Low availability has two different causes: {diagnosis.split(' - ')[0]}. "
-        f"Across {names} the dominant failure mode is **{worst_mode.index[0]}** "
-        f"({pct(worst_mode.iloc[0] / worst_mode.sum())} of their failures). Fleet-wide, tool wear is the "
-        "clearest controllable driver: failure risk jumps after 200 minutes. MTTR looks worse than the typical "
-        "repair because of a few long waits for spare parts. "
-        + (f"PM lateness is concentrated in two crews ({', '.join(pm_red)}). " if pm_red else "")
-        + "In the plan B data, PM lateness does not cause failures (an assumption of the generator); "
-        "the page does not claim that link.\n\n"
+        f"**La historia completa.** La baja disponibilidad tiene dos causas: {diag.split(':')[0]}. En {names} la falla más "
+        f"común es «{wm.index[0]}» ({pct(wm.iloc[0] / wm.sum())} de sus fallas). En toda la flota, el desgaste de la herramienta "
+        "es la causa que más se puede controlar: el riesgo salta después de 200 minutos. El tiempo promedio de reparación se "
+        "ve peor que la reparación típica por unas pocas esperas largas de repuestos. "
+        + (
+            f"El atraso en los preventivos se concentra en dos cuadrillas ({', '.join(pm_red)}). "
+            if pm_red
+            else ""
+        )
+        + "Las órdenes de trabajo son simuladas, así que esta página no afirma que el atraso de los preventivos cause las fallas.\n\n"
     )
 
-    md.append(
-        "## Decision\n\n"
-        f"1. **Condition-based tool change at {TOOL_CHANGE_AT} min of wear.** In 2024 it would have turned "
-        f"**{n_avoid} unplanned tool-wear / overstrain failures** (about {avoid_hours:.0f} h of downtime at the "
-        "median repair time) into planned tool changes - and raised the planned-work share.\n"
-        + (f"2. **Root-cause {rel_mode.lower()} failures on {', '.join(reliability)}** before anything else: "
-           "a machine-specific reliability problem that more technicians would not fix.\n" if reliability else "")
-        + (f"   For {', '.join(repair)}, review the long repairs one by one (parts, skills, access).\n" if repair else "")
-        +
-        f"3. **Stock the critical spare parts** behind the {long_n} long repairs; the target is MTTR closer to "
-        f"the {median:.1f} h median.\n"
-        + (f"4. **Re-plan the PM routine of the {', '.join(pm_red)} crews** (night shift) - same weekly PM, "
-           "scheduled inside their shift.\n\n" if pm_red else "\n")
-    )  # fmt: skip
-    md.append(
-        "## How we keep measuring\n\n"
-        + monitoring_table(
-            e,
-            [
-                (
-                    "pm_compliance",
-                    "Weekly, per crew (leading)",
-                    "Below 80% for a crew - re-plan the week",
-                ),
-                ("planned_work_share", "Monthly", "Below 65% - review reactive work orders"),
-                (
-                    "mtbf",
-                    "Monthly per machine, 3-month rolling",
-                    "Machine in the bottom 2 for 2 months",
-                ),
-                (
-                    "mttr",
-                    "Monthly, with median and longest repairs",
-                    "Any repair > 12 h - check spare parts",
-                ),
-                ("availability", "Monthly per machine", "Below 95% - open a reliability review"),
-            ],
+    md.append("## Solución\n\n")
+    rows = [(f"Cambiar la herramienta a los {TOOL_CHANGE_AT} minutos de uso. En el periodo habría convertido {len(avoid)} fallas "
+             f"(unas {avoid_h:.0f} horas de parada) en cambios planificados.", "Planificador de mantenimiento", fecha(end + pd.Timedelta(days=30)))]  # fmt: skip
+    if falla_mucho:
+        rm = corr[corr["asset_id"].isin(falla_mucho)]["failure_label"].value_counts().index[0]
+        rows.append(
+            (
+                f"Analizar la causa de las fallas por «{rm.lower()}» en {', '.join(falla_mucho)}: más técnicos no lo resuelven.",
+                "Ingeniero de confiabilidad",
+                fecha(end + pd.Timedelta(days=45)),
+            )
         )
-        + "Tool wear at failure is tracked as a diagnostic: after the policy change, no failure should "
-        f"happen above {TOOL_CHANGE_AT} min.\n"
+    if repara_lento:
+        rows.append(
+            (
+                f"Revisar una por una las reparaciones largas de {', '.join(repara_lento)} (repuestos, habilidades, acceso).",
+                "Supervisor de mantenimiento",
+                fecha(end + pd.Timedelta(days=30)),
+            )
+        )
+    rows.append(
+        (
+            f"Tener en almacén los repuestos críticos de las {long_n} reparaciones largas.",
+            "Jefe de almacén",
+            fecha(end + pd.Timedelta(days=60)),
+        )
+    )
+    if pm_red:
+        rows.append(
+            (
+                f"Reprogramar el preventivo de las cuadrillas de {', '.join(pm_red)} dentro de su turno.",
+                "Planificador de mantenimiento",
+                fecha(end + pd.Timedelta(days=14)),
+            )
+        )
+    md.append(decisiones(rows))
+    v = get_valores(t, e, manifest)["maintenance"]
+    md.append(seccion_valor(e, v))
+    md.append(seccion_decision(e, v, rows[0][0]))
+    md.append("### Cómo lo seguimos midiendo\n\n")
+    md.append(seguimiento(e, [
+        ("pm_compliance", "Cada semana, por cuadrilla (avisa antes)", "Menos de 80 % en una cuadrilla: reprogramar la semana"),
+        ("planned_work_share", "Cada mes", "Menos de 65 %: revisar las reparaciones de emergencia"),
+        ("mtbf", "Cada mes por máquina, con los últimos 3 meses", "Una máquina entre las dos peores dos meses seguidos"),
+        ("mttr", "Cada mes, con la reparación típica y las más largas", "Una reparación de más de 12 h: revisar repuestos"),
+        ("availability", "Cada mes por máquina", "Menos de 95 %: abrir un análisis de confiabilidad"),
+    ]))  # fmt: skip
+    md.append(
+        detalle_tecnico(f"""
+- Fuente de proceso: {manifest["process_data"]["name"]} ({manifest["process_data"]["origin"]}). {manifest["process_data"]["note"]}.
+- Supuesto: los {n(len(runs))} registros se reparten en {N_MACHINES} bloques seguidos = {N_MACHINES} máquinas; cada registro es una corrida de {RUN_HOURS:.0f} h, 4 por día hábil.
+- Tablas `runs`, `work_orders`, `asset_periods`. Disponibilidad = `(sum(scheduled_hours) - sum(unplanned_downtime_hours)) / sum(scheduled_hours)`.
+- Tiempo entre fallas = `sum(operating_hours) / sum(failures)`; tiempo de reparación = `mean(repair_hours)` de las órdenes `corrective`.
+- Preventivo a tiempo: `completed_at <= due_date + 3 días`.
+- Clasificación de máquinas: se compara la brecha de cada una frente a la mediana de la flota en tiempo entre fallas y en tiempo de reparación.
+""")
     )
     return "\n".join(md)

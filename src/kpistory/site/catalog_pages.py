@@ -1,9 +1,10 @@
-"""KPI catalog pages: an index plus one page per KPI, generated from catalog.yaml."""
+"""Catálogo de indicadores: un índice y una ficha por indicador, generados desde catalog.yaml."""
 
 from __future__ import annotations
 
 import importlib.util
 import inspect
+import math
 import sys
 from pathlib import Path
 
@@ -14,97 +15,123 @@ from ..engine import Engine, format_threshold, format_value
 from ..formulas import REGISTRY
 from ..paths import TESTS_DIR
 from ..viz import theme
+from .common import detalle_tecnico, leyenda
+from .current import Headline
 
-DIRECTION = {
-    "higher_is_better": "Higher is better ↑",
-    "lower_is_better": "Lower is better ↓",
-    "target_range": "Inside a band ↔ (too high and too low are both bad)",
+MEJOR = {
+    "higher_is_better": "Más alto es mejor",
+    "lower_is_better": "Más bajo es mejor",
+    "target_range": "Dentro de una franja",
 }
-UNIT = {
-    "percent": "%",
-    "hours": "hours",
-    "days": "days",
-    "times_per_year": "times per year",
-    "score": "score (-100 to +100)",
+UNIDAD = {
+    "percent": "porcentaje",
+    "hours": "horas",
+    "days": "días",
+    "times_per_year": "veces al año",
+    "score": "puntos (de −100 a +100)",
+    "g_per_kwh": "gramos de CO₂ por kilovatio hora",
+    "per_million": "por millón de habitantes",
+    "per_100": "por cada 100 habitantes",
+    "ratio": "alumnos por docente",
 }
+
+
+def CASO_DE(engine: Engine, case: str) -> tuple[str, str]:
+    return engine.catalog.cases[case]["title"], case
 
 
 def _hand_examples() -> dict:
-    spec = importlib.util.spec_from_file_location("hand_examples", TESTS_DIR / "hand_examples.py")
-    if spec is None or spec.loader is None or not (TESTS_DIR / "hand_examples.py").exists():
+    path = TESTS_DIR / "hand_examples.py"
+    if not path.exists():
         return {}
+    spec = importlib.util.spec_from_file_location("hand_examples", path)
     module = importlib.util.module_from_spec(spec)
     sys.modules["hand_examples"] = module  # dataclasses need the module registered
     spec.loader.exec_module(module)
     return module.BY_ID
 
 
-def index_page(engine: Engine, current: dict[str, float]) -> str:
+def _value(engine: Engine, k: KPI, h: Headline | None) -> str:
+    if h is None or math.isnan(h.value):
+        return "⚪ Sin dato" + (f" ({h.note})" if h and h.note else "")
+    status = engine.status(k.id, h.value)
+    return f"{theme.STATUS_ICON[status]} {theme.STATUS_TEXT[status]} · {format_value(k, h.value)}"
+
+
+def index_page(engine: Engine, values: dict[str, Headline]) -> str:
     md = [
-        "# KPI catalog\n",
-        "Generated from [`kpis/catalog.yaml`](https://github.com/juansanchezalcantara20-ai/kpi-catalog-storytelling/blob/main/kpis/catalog.yaml) - "
-        "the single source of truth for the Python engine, the SQL reference queries, the story site and the dashboard. "
-        f"**{len(engine.catalog)} KPIs** in {len(engine.catalog.cases)} domains. Every KPI page shows its definition, "
-        "how to read it, the common misreadings, its SQL, the Python function and a worked example "
-        "taken from the test suite.\n",
+        "# Catálogo de indicadores\n",
+        f"Los **{len(engine.catalog)} indicadores** del proyecto, definidos una sola vez. Cada ficha dice qué pregunta responde, "
+        "cómo se calcula en palabras, un ejemplo con números, qué decisión ayuda a tomar y con qué otro indicador se "
+        "equilibra. Al final de cada ficha hay un detalle técnico desplegable con la fórmula y el código.\n",
+        leyenda(),
     ]
-    for case, meta in engine.catalog.cases.items():
-        md.append(f"\n## {meta['title']}\n")
-        md.append("| KPI | Business question | Direction | Target | Owner | Current |")
+    from ..catalog import rubros_config
+
+    temas = rubros_config()["temas"]
+    for tema, td in temas.items():
+        md.append(f"\n## {td['nombre']}\n")
+        md.append(f"[Ver el tema](../temas/{tema}.md)\n")
+        md.append("| Indicador | Qué responde | Mejor si | Meta | Responsable | Valor actual |")
         md.append("|---|---|---|---|---|---|")
-        for k in engine.catalog.for_case(case):
-            value = current.get(k.id, float("nan"))
-            status = engine.status(k.id, value)
-            cur = (
-                f"{theme.STATUS_ICON[status]} {format_value(k, value)}" if k.id in current else "–"
-            )
+        for k in engine.catalog.for_tema(tema):
             md.append(
-                f"| [{k.name}]({k.id}.md) | {k.question} | {DIRECTION[k.direction].split(' (')[0]} | "
-                f"{format_threshold(k).split(' (')[0]} | {k.owner} | {cur} |"
+                f"| [{k.name}]({k.id}.md) | {k.question} | {MEJOR[k.direction]} | "
+                f"{format_threshold(k, with_alert=False)} | {k.owner} | {_value(engine, k, values.get(k.id))} |"
             )
     md.append(
-        "\n*Current* = value on the full dataset of the case (illustrative). Status icons: ✓ on target, ! watch, ✕ act.\n"
+        "\n*Valor actual* = el mismo valor que muestran el caso y el tablero, con su periodo indicado en cada ficha. Las metas son ilustrativas.\n"
     )
     return "\n".join(md)
 
 
-def kpi_page(engine: Engine, k: KPI, current: float | None, examples: dict, cases: set[str]) -> str:
-    md = [f"# {k.name}\n", f'<p class="story-question">{k.question}</p>\n']
-    if current is not None:
-        status = engine.status(k.id, current)
-        md.append(
-            f"**Current value ({k.case} case data):** {format_value(k, current)} - "
-            f"{theme.STATUS_ICON[status]} {theme.STATUS_TEXT[status]}."
-            + (f" [Open the case](../cases/{k.case}.md)." if k.case in cases else "")
-            + "\n"
-        )
-    md.append("| Field | Value |\n|---|---|")
-    rows = [
-        ("Definition", k.definition),
-        ("Formula", f"`{k.formula}`"),
-        ("Unit", UNIT[k.unit]),
-        ("Granularity", k.granularity),
-        ("Direction", DIRECTION[k.direction]),
-        ("Target and thresholds", format_threshold(k)),
-        ("Parameters", ", ".join(f"`{p} = {v}`" for p, v in k.params.items()) or "–"),
-        ("Owner", k.owner),
-        ("Source", k.source),
-        (
-            "Input",
-            f"table `{k.input['table']}`, columns "
-            + (", ".join(f"`{c}`" for c in k.input["columns"]) or "per `kpis/dq_rules.yaml`"),
-        ),
-        ("Recommended chart", f"**{k.chart['type']}** - {k.chart['why']}"),
-        (
-            "Related KPIs",
-            ", ".join(f"[{engine.catalog[r].name}]({r}.md)" for r in k.related) or "–",
-        ),
-    ]
-    md += [f"| {a} | {b.replace('|', '/')} |" for a, b in rows]
-    md.append(f"\n## How to read it\n\n{k.how_to_read}\n")
-    md.append("## Common misreadings\n")
-    md += [f"- {m}" for m in k.misreadings]
+def kpi_page(engine: Engine, k: KPI, h: Headline | None, examples: dict) -> str:
+    from ..catalog import rubros_config
+
+    cfg = rubros_config()
+    title, slug = CASO_DE(engine, k.case)
+    md = [f"# {k.name}\n", f'<p class="story-question">{k.question}</p>\n', leyenda()]
+    md.append(
+        "**Tema:** "
+        + f"[{cfg['temas'][k.tema]['nombre']}](../temas/{k.tema}.md)"
+        + " · **Rubros:** "
+        + ", ".join(f"[{cfg['rubros'][r]['nombre']}](../rubros/{r}.md)" for r in k.rubros)
+        + "\n"
+    )
+    md.append(
+        f"**Valor actual:** {_value(engine, k, h)}"
+        + (f" · {h.period}" if h and not h.note else "")
+        + f". [Ver el caso «{title}»]({'../cases/' + slug + '.md'}).\n"
+    )
+    md.append(
+        f"**Meta:** {format_threshold(k)}. {MEJOR[k.direction]}. **Responsable:** {k.owner}.\n"
+    )
+    if k.metas_por_rubro:
+        sign = {"higher_is_better": "≥", "lower_is_better": "≤"}.get(k.direction, "")
+        md.append("**Metas por rubro:** " + "; ".join(
+            f"{cfg['rubros'][r]['nombre']} {sign} {format_value(k, m['target'])} ({m['why']})" for r, m in k.metas_por_rubro.items()) + "\n")  # fmt: skip
+    md.append(f"## Qué es\n\n{k.meaning}\n")
+    md.append(f"## Cómo se calcula\n\n{k.calculation}\n")
     ex = examples.get(k.id)
+    if ex is not None:
+        md.append(f"## Ejemplo con números\n\n{ex.working}\n")
+    md.append(f"## Cómo leerlo\n\n{k.how_to_read}\n")
+    md.append("## Errores comunes al leerlo\n")
+    md += [f"- {m}" for m in k.misreadings]
+    md.append(f"\n## Qué decisión ayuda a tomar\n\n{k.decision}\n")
+    rel = ", ".join(f"[{engine.catalog[r].name}]({r}.md)" for r in k.related)
+    md.append(f"## Con qué se equilibra\n\n{k.balance} Indicadores relacionados: {rel}.\n")
+    md.append(f"## Cómo mostrarlo\n\n{k.chart['why']}\n")
+
+    tech = [
+        f"- Identificador: `{k.id}` (tema `{k.tema}`, rubros {', '.join(f'`{r}`' for r in k.rubros)}). Unidad: {UNIDAD[k.unit]}. Detalle: {k.granularity}",
+        f"- Definición formal: {k.definition}",
+        f"- Fórmula: `{k.formula}`",
+        f"- Tabla `{k.input['table']}`; columnas: "
+        + (", ".join(f"`{c}`" for c in k.input["columns"]) or "según las reglas de calidad"),
+        "- Parámetros: " + (", ".join(f"`{p} = {v}`" for p, v in k.params.items()) or "ninguno"),
+        f"- Fuente: {k.source}.",
+    ]
     if ex is not None:
         table = ex.table.copy()
         for col in table.columns:
@@ -112,35 +139,32 @@ def kpi_page(engine: Engine, k: KPI, current: float | None, examples: dict, case
                 table[col] = (
                     table[col].dt.strftime("%Y-%m-%d %H:%M").str.replace(" 00:00", "", regex=False)
                 )
-        md.append("\n## Worked example (from the test suite)\n")
-        md.append(table.to_markdown(index=False) if _has_tabulate() else _md_table(table))
         params = {**k.params, **ex.overrides}
+        tech += [
+            "",
+            "Tabla del ejemplo (la misma que usa la prueba automática):",
+            "",
+            _md_table(table),
+            "",
+        ]
         if params:
-            md.append("\nParameters: " + ", ".join(f"`{a} = {b}`" for a, b in params.items()))
-        md.append(
-            f"\n**Expected result: {format_value(k, ex.expected, decimals=2)}.** {ex.working}\n"
-        )
-        md.append(
-            "This example is asserted in `tests/test_formulas.py` against the Python function"
-            + (" and in `tests/test_sql.py` against the SQL below." if k.sql else ".")
-            + "\n"
-        )
-    md.append("## Implementations\n")
-    md.append(
-        '=== "Python (engine)"\n\n```python\n'
-        + inspect.getsource(REGISTRY[k.id]).replace("\n", "\n")
-        + "```\n"
-    )
+            tech.append(
+                "Parámetros del ejemplo: " + ", ".join(f"`{a} = {b}`" for a, b in params.items())
+            )
+        tech.append(f"Resultado esperado: **{format_value(k, ex.expected, decimals=2)}**, comprobado por la prueba de fórmulas"
+                    + (" y por la consulta SQL." if k.sql else "."))  # fmt: skip
+    tech += [
+        "",
+        "Función de Python (la única implementación que usa el sitio):",
+        "",
+        "```python",
+        inspect.getsource(REGISTRY[k.id]).rstrip(),
+        "```",
+    ]
     if k.sql:
-        md.append(f"Reference SQL (tested on SQLite):\n\n```sql\n{k.sql_query}\n```\n")
-    return "\n".join(md).replace(
-        '=== "Python (engine)"\n\n',
-        "Python function (the single implementation used by the site):\n\n",
-    )
-
-
-def _has_tabulate() -> bool:
-    return importlib.util.find_spec("tabulate") is not None
+        tech += ["", "SQL de referencia (probado en SQLite):", "", "```sql", k.sql_query, "```"]
+    md.append(detalle_tecnico("\n".join(tech)))
+    return "\n".join(md)
 
 
 def _md_table(df: pd.DataFrame) -> str:
@@ -151,11 +175,11 @@ def _md_table(df: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
-def write(engine: Engine, current: dict[str, float], out_dir: Path, cases: set[str]) -> None:
+def write(engine: Engine, values: dict[str, Headline], out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     examples = _hand_examples()
-    (out_dir / "index.md").write_text(index_page(engine, current), encoding="utf-8")
+    (out_dir / "index.md").write_text(index_page(engine, values), encoding="utf-8")
     for k in engine.catalog:
         (out_dir / f"{k.id}.md").write_text(
-            kpi_page(engine, k, current.get(k.id), examples, cases), encoding="utf-8"
+            kpi_page(engine, k, values.get(k.id), examples), encoding="utf-8"
         )

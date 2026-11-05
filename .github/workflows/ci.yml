@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  pruebas:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,13 +14,13 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -e ".[dev]"
-      - name: Lint
+      - name: Estilo del código
         run: |
           ruff check .
           ruff format --check .
-      - name: Validate catalog
+      - name: Validar el catálogo
         run: python -m kpistory validate
-      - name: Formula tests (hand-calculated examples)
+      - name: Pruebas de fórmulas, datos y fuentes
         run: python -m pytest
-      - name: Build everything offline (plan B data, pages, site)
+      - name: Construir todo sin internet (plan B) y probar legibilidad, coherencia y privacidad
         run: make all SOURCE=synthetic

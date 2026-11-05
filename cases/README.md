@@ -1,15 +1,24 @@
-# Cases
+# Casos
 
-Each case is told as a story on the website with the same structure:
-**context → question → KPI → finding → decision → how it keeps being measured.**
+Cada caso se cuenta en el sitio con la misma plantilla **Problema → Solución → Resultado**, en siete partes:
+**En 30 segundos → Problema → Indicadores (resultado, adelantados y contrapeso) → Análisis → Solución → Resultado →
+Detalle técnico**. El resultado dice siempre si es **observado en datos reales** (solo con un evento documentado y su
+fuente) o **estimado (escenario)**. Una prueba revisa las siete partes y la etiqueta en cada página publicada.
 
-| # | Case | KPIs | Data | Plan B |
-|---|------|------|------|--------|
-| 1 | [Service operations & SLA](01_service/README.md) | first response, resolution time, SLA compliance, aged backlog, FCR, reopen rate | Synthetic ticket queue simulation | - (always synthetic) |
-| 2 | [Maintenance](02_maintenance/README.md) | MTBF, MTTR, availability, PM compliance, planned share | UCI AI4I 2020 + work-order generator | AI4I re-generated from its published rules |
-| 3 | [Inventory & demand](03_inventory/README.md) | fill rate, OTIF, turnover, days of cover, stockouts, obsolescence, MAPE, WAPE, bias | UCI Online Retail II demand + stock simulation | Synthetic transaction log with the same schema and defects |
-| 4 | [Customers](04_customers/README.md) | retention, repeat purchase, RFM revenue at risk, NPS | UCI Online Retail II + simulated survey | Same synthetic log as case 3 |
-| 5 | [Data quality as a KPI](05_data_quality/README.md) | completeness, uniqueness, validity, timeliness | The landing data of cases 1-4 | Follows the other cases |
+| Caso | Rubro | Datos | Resultado | Plan B (si la descarga falla) |
+|------|-------|-------|-----------|------|
+| [Atención de solicitudes](01_service/README.md) | Servicios y atención | **Reales:** NYC 311, Departamento de Transporte | estimado | mesa de ayuda simulada |
+| [Mantenimiento](02_maintenance/README.md) | Minería | AI4I 2020 (UCI): conjunto de referencia, sintético según su publicador | estimado | AI4I regenerado con sus reglas publicadas |
+| [Inventario y demanda](03_inventory/README.md) | Retail | **Reales:** Online Retail II (UCI) + inventario simulado | estimado | ventas simuladas con la misma estructura |
+| [Clientes](04_customers/README.md) | Retail | **Reales:** Online Retail II (UCI) + encuesta simulada | estimado | las mismas ventas simuladas |
+| [Calidad de los datos](05_data_quality/README.md) | Retail, Minería, Servicios | los datos de los casos anteriores tal como llegan | estimado | sigue a los otros casos |
+| Morosidad de créditos | Banca, seguros y AFP | **Simulados** (no hay una fuente pública estable sin registro) | estimado | – |
+| Generación eléctrica | Energía | **Reales:** Our World in Data, energía (CC BY 4.0) | **observado**: retiro del carbón en Chile (2019) | generación simulada |
+| Vacunación y mortalidad | Salud | **Reales:** Our World in Data, COVID-19 (CC BY 4.0) | **observado**: inicio de la vacunación en Perú (9 feb 2021) | series simuladas |
+| Líneas móviles | Telecomunicaciones | **Reales:** UIT vía Our World in Data (TidyTuesday) | estimado | penetración simulada |
+| Alumnos por docente | Educación | **Reales:** UNESCO (TidyTuesday) | estimado | relaciones simuladas |
+| Puntualidad en el transporte | Logística y transporte | **Reales:** Oficina de Estadísticas de Transporte de EE. UU. (vega-datasets) | estimado | vuelos simulados |
 
-The provenance actually used by the last build is in `data/processed/manifest.json`
-and on the website's *Data sources* page.
+Si una descarga falla, el caso usa su plan B y su resultado pasa a «estimado» aunque el catálogo lo declare
+«observado»: un resultado observado exige datos reales en esa versión. URL, licencia, publicador, filtros y filas de
+cada fuente están en `config/fuentes.yaml` y en la página *Fuentes* del sitio.

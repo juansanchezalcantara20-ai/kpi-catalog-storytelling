@@ -28,12 +28,12 @@ N_MACHINES = 10
 RUN_HOURS = 4.0
 RUNS_PER_DAY = 4
 FAILURE_MODES = ["TWF", "HDF", "PWF", "OSF", "RNF"]
-FAILURE_LABEL = {
-    "TWF": "Tool wear",
-    "HDF": "Heat dissipation",
-    "PWF": "Power",
-    "OSF": "Overstrain",
-    "RNF": "Random",
+FAILURE_LABEL = {  # shown to readers
+    "TWF": "Desgaste de herramienta",
+    "HDF": "Disipación de calor",
+    "PWF": "Potencia",
+    "OSF": "Sobreesfuerzo",
+    "RNF": "Aleatoria",
 }
 AI4I_COLUMNS = [
     "UDI", "Product ID", "Type", "Air temperature [K]", "Process temperature [K]",
@@ -223,7 +223,7 @@ def clean_work_orders(landing: pd.DataFrame) -> pd.DataFrame:
     tolerance = catalog.load()["pm_compliance"].params["tolerance_days"]
     df["pm_on_time"] = pm_on_time(df, tolerance).where(df["wo_type"].eq("preventive"))
     df["month"] = df["created_at"].dt.to_period("M").dt.start_time
-    df["failure_label"] = df["failure_mode"].map({**FAILURE_LABEL, "UNK": "Unknown"})
+    df["failure_label"] = df["failure_mode"].map({**FAILURE_LABEL, "UNK": "Sin registrar"})
     return df.reset_index(drop=True)
 
 

@@ -150,8 +150,8 @@ def simulate(sales: pd.DataFrame, seed: int = SEED) -> dict[str, pd.DataFrame]:
             "on_hand_units": snap["on_hand_units"].reindex(skus).to_numpy(),
             "on_hand_value": snap["on_hand_value"].reindex(skus).to_numpy(),
             "days_since_last_movement": (end - last_move).dt.days.to_numpy(),
-            "sku_group": ["Best seller"] * min(N_TOP, len(skus))
-            + ["Faded"] * max(0, len(skus) - N_TOP),
+            "sku_group": ["Más vendido"] * min(N_TOP, len(skus))
+            + ["Dejó de venderse"] * max(0, len(skus) - N_TOP),
         }
     )
     forecast = weekly_forecast(daily[["sku", "date", "demand_units"]])

@@ -1,21 +1,18 @@
-# Case 1 · Service operations & SLA
+# Caso 1 · Atención de solicitudes
 
-**Data:** synthetic, always. There is no public service-desk log with timestamps,
-priorities, SLA targets and reopenings, so the generator is the primary source.
+**Datos reales:** [NYC 311 Service Requests](https://data.cityofnewyork.us/Social-Services/311-Service-Requests-from-2010-to-Present/erm2-nwe9)
+(NYC Open Data), sin cuenta ni clave. Configuración en `config/fuentes.yaml`: solo el Departamento de Transporte
+(DOT) y los últimos 12 meses completos hasta el fin del mes anterior.
 
-**Generator:** `src/kpistory/data/tickets.py`, seed `7`, calendar year 2024.
+- **Privacidad:** solo se piden las columnas número, fecha de apertura, fecha de cierre, agencia, tipo, canal, estado y
+  distrito. Nunca direcciones, coordenadas ni textos libres.
+- **Descarga:** paginada de 50 000 filas, con 4 reintentos; si llegan menos de 5 000 filas se considera fallida.
+- **Supuesto propio:** prioridad y plazo por tipo de reclamo (tabla en `config/fuentes.yaml` y en *Fuentes de datos*).
+- **Sin dato en la fuente:** primera respuesta, contactos y reaperturas.
+- **Fecha de corte:** último minuto del mes anterior; lo cerrado después cuenta como abierto.
 
-| Assumption | Value |
-|---|---|
-| Queues (tickets per weekday) | Billing 9 · Technical 12 · Field Support 8 · Accounts 6; weekends at 30% |
-| Priorities | P1 5% · P2 17% · P3 48% · P4 30%; SLA 8 / 24 / 72 / 120 h |
-| Capacity | each queue resolves ~1.3× its normal daily demand (Poisson); P1 first, then oldest |
-| Event | from 2024-09-01 a product rollout raises Field Support demand by 60%; capacity unchanged |
-| Side effects under pressure | slower first response, lower FCR, reopen probability 4% → 10% |
-| Defects injected (for case 5) | 0.5% duplicate rows, 1.2% missing channel, 0.2% resolved-before-created, 2.5% loaded > 24 h late |
-
-**Cleaning:** duplicates by `ticket_id` removed; impossible timestamps removed; missing
-channel set to `unknown`; derived columns computed once in `derive_ticket_columns`.
-
-**Reading the results:** findings are an illustration of the method on synthetic
-data, not a claim about any real service desk.
+**Plan B:** `src/kpistory/data/tickets.py`, semilla `7`, año 2024. Mesa de ayuda con cuatro equipos (Facturación,
+Soporte técnico, Soporte en terreno, Cuentas), prioridades Urgente 8 h · Alta 24 h · Media 72 h · Baja 120 h, y una
+capacidad diaria de 1.3 veces la demanda normal. Desde el 1 de septiembre de 2024 la demanda de «Soporte en terreno»
+sube 60 % sin más personal. Defectos agregados para el caso 5: 0.5 % de duplicados, 1.2 % sin canal, 0.2 % con cierre
+anterior a la apertura y 2.5 % cargados con más de 24 h de atraso.

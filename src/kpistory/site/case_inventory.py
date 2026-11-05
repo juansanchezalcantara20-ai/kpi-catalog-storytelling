@@ -1,4 +1,4 @@
-"""Case 3 page - Inventory & demand."""
+"""Caso 3 - Inventario y demanda."""
 
 from __future__ import annotations
 
@@ -7,19 +7,25 @@ import plotly.graph_objects as go
 
 from ..data.inventory import MA_WEEKS, N_FADED, N_TOP, ORDER_UP_TO_WEEKS
 from ..engine import Engine
+from ..valor import get_valores
 from ..viz import charts, theme
-from .common import Tile, monitoring_table, pct, question, source_note, tiles
-
-
-def _abc(forecast: pd.DataFrame) -> pd.Series:
-    """A = SKUs making the first 80% of units, B = next 15%, C = rest."""
-    units = forecast.groupby("sku")["actual_units"].sum().sort_values(ascending=False)
-    share = units.cumsum() / units.sum()
-    cls = pd.Series("C", index=units.index)
-    cls[share <= 0.80] = "A"
-    cls[(share > 0.80) & (share <= 0.95)] = "B"
-    cls.iloc[0] = "A"
-    return cls
+from .common import (
+    aviso_datos,
+    bloque_bala,
+    de_cada_100,
+    decisiones,
+    detalle_tecnico,
+    en_30_segundos,
+    n,
+    pct,
+    pregunta,
+    seccion_decision,
+    seccion_valor,
+    seguimiento,
+    tiles,
+)
+from .current import fecha, headline, mes
+from .plantilla import ficha
 
 
 def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
@@ -29,281 +35,308 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         t["inventory_snapshot"],
         t["forecast"],
     )
+    H = headline(t, e, manifest)
     end = daily["date"].max()
     start12 = end - pd.Timedelta(days=364)
-    ol12 = ol[ol["order_date"] >= start12]
-    d12 = daily[daily["date"] >= start12]
-    fc12 = fc[fc["week"] >= start12]
-    period = f"{start12:%b %Y} - {end:%b %Y}"
-
-    v = {
-        "fill_rate": e.compute("fill_rate", ol12),
-        "otif": e.compute("otif", ol12),
-        "stockout_rate": e.compute("stockout_rate", d12),
-        "inventory_turnover": e.compute("inventory_turnover", d12),
-        "days_of_cover": e.compute("days_of_cover", d12[d12["sku"].isin(snap.loc[snap["sku_group"].eq("Best seller"), "sku"])]),
-        "obsolescence_share": e.compute("obsolescence_share", snap),
-        "wape": e.compute("wape", fc12),
-        "mape": e.compute("mape", fc12),
-        "forecast_bias": e.compute("forecast_bias", fc12),
-    }  # fmt: skip
-
-    md = ["# Case 3 · Inventory & demand\n", source_note(manifest, ["transactions", "inventory"])]
-    md.append(
-        "## Context\n\n"
-        f"An online gift retailer sells mostly to small shops; demand peaks before Christmas. The planning "
-        f"team forecasts each SKU with an **{MA_WEEKS}-week moving average**, reviews stock every Monday and "
-        f"orders up to {ORDER_UP_TO_WEEKS:.0f} weeks of forecast from suppliers with a 10-17 day lead time. "
-        f"The case follows the {N_TOP} best-selling SKUs plus {N_FADED} SKUs whose demand faded.\n\n"
+    ol12, d12, fc12 = (
+        ol[ol["order_date"] >= start12],
+        daily[daily["date"] >= start12],
+        fc[fc["week"] >= start12],
     )
-    md.append("## Question\n\n" + question(
-        "Is our stock serving customers without tying up capital - and what breaks the balance?"
-    ))  # fmt: skip
-    md.append(f"## KPIs · {period}\n\n")
-    md.append(tiles(e, [
-        Tile("fill_rate", v["fill_rate"], "units shipped / ordered"),
-        Tile("otif", v["otif"], "complete and on time, per order"),
-        Tile("stockout_rate", v["stockout_rate"], "active SKU-days at zero"),
-        Tile("days_of_cover", v["days_of_cover"], f"best sellers, {end:%d %b %Y}"),
-        Tile("inventory_turnover", v["inventory_turnover"], "annualised, at cost"),
-        Tile("obsolescence_share", v["obsolescence_share"], f"stock value, {end:%d %b %Y}"),
-        Tile("wape", v["wape"], "weekly, SKU level"),
-        Tile("mape", v["mape"], "same forecasts as WAPE"),
-        Tile("forecast_bias", v["forecast_bias"], "+ = over-forecast"),
-    ]))  # fmt: skip
-    md.append(
-        "Service (fill rate, OTIF, stockouts) and capital (cover, turnover, obsolescence) pull in opposite "
-        "directions; forecast accuracy and **bias** sit upstream of both.\n\n"
-    )
+    periodo = f"{mes(start12)} – {mes(end)}"
 
-    md.append("## Finding\n\n")
-    # 1 - OTIF decomposition
     lines = ol12.assign(
-        short=ol12["qty_shipped"] < ol12["qty_ordered"],
-        late=ol12["delivered_date"] > ol12["promised_date"],
+        corto=ol12["qty_shipped"] < ol12["qty_ordered"],
+        tarde=ol12["delivered_date"] > ol12["promised_date"],
     )
-    orders = lines.groupby("order_id")[["short", "late"]].any()
-    cats = pd.Series(
-        {
-            "On time, in full": (~orders["short"] & ~orders["late"]).mean(),
-            "Short only": (orders["short"] & ~orders["late"]).mean(),
-            "Late only": (~orders["short"] & orders["late"]).mean(),
-            "Short and late": (orders["short"] & orders["late"]).mean(),
-        }
-    )
-    failures = cats.drop("On time, in full").sort_values(ascending=False)
-    top_fail = failures.index[0]
+    orders = lines.groupby("order_id")[["corto", "tarde"]].any()
+    cats = pd.Series({
+        "Completo y a tiempo": (~orders["corto"] & ~orders["tarde"]).mean(),
+        "Incompleto": (orders["corto"] & ~orders["tarde"]).mean(),
+        "Tarde": (~orders["corto"] & orders["tarde"]).mean(),
+        "Incompleto y tarde": (orders["corto"] & orders["tarde"]).mean(),
+    })  # fmt: skip
+    top_fail = cats.drop("Completo y a tiempo").idxmax()
     order_size = lines.groupby("order_id").size().mean()
-    fig = charts.bar(
-        list(cats.index), cats.values,
-        conclusion=f"Fill rate is {pct(v['fill_rate'])}, yet only {pct(v['otif'])} of orders arrive complete "
-        f"and on time - most failures are '{top_fail.lower()}'",
-        subtitle=f"Share of orders by outcome, {period} (an order has {order_size:.1f} lines of these SKUs on average)",
-        highlight={top_fail}, text=[pct(x, 1) for x in cats.values],
-        colors=[theme.STATUS["green"] if c == "On time, in full" else (theme.HIGHLIGHT if c == top_fail else theme.CONTEXT) for c in cats.index],
-    )  # fmt: skip
-    fig.update_xaxes(range=[0, 1.1])
-    md.append(
-        charts.to_html(
-            fig,
-            height=320,
-            table=cats.rename("share of orders")
-            .map(pct)
-            .reset_index()
-            .rename(columns={"index": "outcome"}),
-        )
-    )
-    md.append(
-        f"Fill rate counts **units**; OTIF counts **orders**. With {order_size:.1f} lines per order, one short "
-        "line fails the whole order - that is why the two KPIs can tell such different stories.\n\n"
-    )
 
-    # 2 - bias by month
-    mb = e.compute_by(
-        "forecast_bias", fc.assign(month=fc["week"].dt.to_period("M").dt.start_time), "month"
-    )
+    mb = e.compute_by("forecast_bias", fc.assign(m=fc["week"].dt.to_period("M").dt.start_time), "m")
     mb = mb[
-        (mb["month"] >= start12 - pd.Timedelta(days=62))
-        & (mb["month"] + pd.offsets.MonthEnd(0) <= end)
+        (mb["m"] >= start12 - pd.Timedelta(days=62)) & (mb["m"] + pd.offsets.MonthEnd(0) <= end)
     ]
     lo_band, hi_band = e.catalog["forecast_bias"].thresholds["green"]
     lowest, highest = mb.loc[mb["value"].idxmin()], mb.loc[mb["value"].idxmax()]
-    colors = [
-        theme.SECOND if x < lo_band else theme.HIGHLIGHT if x > hi_band else theme.CONTEXT
-        for x in mb["value"]
-    ]
-    fig = go.Figure(go.Bar(x=mb["month"], y=mb["value"], marker_color=colors,
-                           hovertemplate="%{x|%b %Y}: %{y:+.1%}<extra></extra>"))  # fmt: skip
-    charts.add_band(fig, lo_band, hi_band)
-    fig.add_hline(y=0, line=dict(color=theme.INK_2, width=1))
-    charts.annotate(
-        fig,
-        lowest["month"],
-        lowest["value"],
-        f"under-forecast {lowest['value']:+.0%}<br>→ stockouts",
-        ay=40,
-    )
-    charts.annotate(
-        fig,
-        highest["month"],
-        highest["value"],
-        f"over-forecast {highest['value']:+.0%}<br>→ excess stock",
-        ay=-40,
-    )
-    fig.update_layout(title=theme.title(
-        f"The moving average lags the season: {lowest['value']:+.0%} in {lowest['month']:%b %Y}, "
-        f"{highest['value']:+.0%} in {highest['month']:%b %Y}",
-        f"Forecast bias by month ((forecast - actual) / actual); green band = ±{hi_band:.0%}; "
-        "orange = under-forecast, blue = over-forecast"))  # fmt: skip
-    fig.update_yaxes(tickformat="+.0%", rangemode="normal")
-    md.append(charts.to_html(fig, height=380))
-
-    # 3 - stockouts by week
     sw = e.compute_by(
-        "stockout_rate", d12.assign(week=d12["date"].dt.to_period("W-SUN").dt.start_time), "week"
+        "stockout_rate",
+        d12.assign(semana=d12["date"].dt.to_period("W-SUN").dt.start_time),
+        "semana",
     )
     so = d12[d12["active"] & (d12["on_hand_units"] <= 0)]
-    under_months = set(mb.loc[mb["value"] < lo_band, "month"])
+    under_months = set(mb.loc[mb["value"] < lo_band, "m"])
     under_share = (
         so["date"].dt.to_period("M").dt.start_time.isin(under_months).mean()
         if len(so)
         else float("nan")
     )
     peak = sw.loc[sw["value"].idxmax()]
+    age_limit = e.catalog["obsolescence_share"].params["age_limit_days"]
+    old = snap[snap["days_since_last_movement"] > age_limit]
+    faded_old = int(old["sku_group"].eq("Dejó de venderse").sum())
+
+    md = [
+        "# Inventario: ¿atendemos a los clientes sin inmovilizar dinero de más?\n",
+        ficha("inventory", manifest) + aviso_datos(manifest, ["transactions", "inventory"]),
+    ]
+    md.append(en_30_segundos(
+        f"Se despacharon {de_cada_100(H['fill_rate'].value, 'unidades pedidas')}, pero solo "
+        f"{de_cada_100(H['otif'].value, 'pedidos')} llegaron completos y a tiempo.",
+        f"El pronóstico se queda corto antes de la temporada alta ({lowest['value'] * 100:+.0f} % en {mes(lowest['m'])}) y se pasa "
+        f"después ({highest['value'] * 100:+.0f} % en {mes(highest['m'])}): primero faltan productos y luego sobran.",
+        "Pronosticar la temporada con el año anterior, anticipar el inventario antes del pico y liquidar lo que dejó de venderse.",
+    ))  # fmt: skip
+    md.append(
+        "## Problema\n\n"
+        "Una tienda en línea de artículos de regalo vende sobre todo a pequeños comercios; la demanda sube antes de "
+        f"Navidad. El equipo de planificación pronostica cada producto con el **promedio de las últimas {MA_WEEKS} semanas**, "
+        f"revisa el inventario cada lunes y pide hasta cubrir {ORDER_UP_TO_WEEKS:.0f} semanas de pronóstico a proveedores que "
+        f"tardan entre 10 y 17 días. El caso sigue a los {N_TOP} productos más vendidos y a {N_FADED} que dejaron de venderse.\n\n"
+    )
+    md.append(
+        "### La pregunta del negocio\n\n"
+        + pregunta(
+            "¿Nuestro inventario atiende a los clientes sin inmovilizar dinero de más, y qué rompe ese equilibrio?"
+        )
+    )
+    md.append("## Indicadores\n\n")
+    md.append(
+        tiles(
+            e,
+            H,
+            [
+                "fill_rate",
+                "otif",
+                "stockout_rate",
+                "days_of_cover",
+                "inventory_turnover",
+                "obsolescence_share",
+                "wape",
+                "mape",
+                "forecast_bias",
+            ],
+        )
+    )
+    md.append(
+        "El servicio (unidades atendidas, pedidos completos, quiebres) y el dinero inmovilizado (cobertura, rotación, "
+        "inventario sin movimiento) tiran en sentidos opuestos. El pronóstico, y sobre todo su **sesgo**, está antes de ambos.\n\n"
+    )
+
+    md.append(bloque_bala(e, H, ["otif", "fill_rate", "obsolescence_share", "forecast_bias"]))
+    md.append("## Análisis\n\n")
+    ko = e.catalog["otif"]
+    olm = ol.assign(m=ol["order_date"].dt.to_period("M").dt.start_time)
+    olm = (
+        olm[olm["m"] < end.to_period("M").start_time] if end < end + pd.offsets.MonthEnd(0) else olm
+    )
+    ot = e.compute_by("otif", olm, "m").tail(13)
+    lowm = ot.loc[ot["value"].idxmin()]
+    fig = charts.kpi_trend(
+        ko, [mes(m) for m in ot["m"]], ot["value"].tolist(),
+        conclusion=f"Pedidos completos y a tiempo nunca llegan a la meta; el peor mes fue {mes(lowm['m'])} con {pct(lowm['value'])}"
+        if (ot["value"] < ko.target).all() else f"El peor mes de pedidos completos y a tiempo fue {mes(lowm['m'])} con {pct(lowm['value'])}",
+        subtitle="De cada 100 pedidos del mes, cuántos llegaron completos y a tiempo; verde = zona en meta, amarillo = margen de alerta",
+        events=[(mes(lowm["m"]), "peor mes")], n=olm.groupby("m")["order_id"].nunique().reindex(ot["m"]).tolist(), n_label="pedidos",
+    )  # fmt: skip
+    md.append(charts.to_html(fig, height=380))
+    fig = charts.bar(
+        list(cats.index), cats.values,
+        conclusion=f"Se despacha {pct(H['fill_rate'].value)} de las unidades, pero solo {pct(H['otif'].value)} de los pedidos llega "
+        f"completo y a tiempo; la falla más común es «{top_fail.lower()}»",
+        subtitle=f"Pedidos según cómo llegaron, {periodo} (cada pedido tiene en promedio {order_size:.1f} líneas de estos productos)",
+        pct=True, text=[pct(x, 1) for x in cats.values],
+        colors=[theme.STATUS["green"] if c == "Completo y a tiempo" else (theme.HIGHLIGHT if c == top_fail else theme.CONTEXT) for c in cats.index],
+    )  # fmt: skip
+    fig.update_xaxes(range=[0, 110])
+    md.append(
+        charts.to_html(
+            fig,
+            height=320,
+            table=pd.DataFrame(
+                {"Cómo llegó": cats.index, "Pedidos": [pct(v, 1) for v in cats.values]}
+            ),
+        )
+    )
+    md.append(
+        f"Las unidades atendidas cuentan **unidades**; «completos y a tiempo» cuenta **pedidos**. Con {order_size:.1f} líneas "
+        "por pedido, una sola línea incompleta arruina el pedido entero: por eso los dos indicadores cuentan historias tan distintas.\n\n"
+    )
+
+    colors = [
+        theme.SECOND if x < lo_band else theme.HIGHLIGHT if x > hi_band else theme.CONTEXT
+        for x in mb["value"]
+    ]
+    fig = go.Figure(go.Bar(x=[mes(m) for m in mb["m"]], y=mb["value"] * 100, marker_color=colors,
+                           hovertemplate="%{x}: %{y:+.1f} %<extra></extra>"))  # fmt: skip
+    charts.add_band(fig, lo_band, hi_band, pct=True)
+    fig.add_hline(y=0, line=dict(color=theme.INK_2, width=1))
+    charts.annotate(
+        fig,
+        mes(lowest["m"]),
+        lowest["value"] * 100,
+        f"se queda corto {lowest['value'] * 100:+.0f} %<br>→ faltan productos",
+        ay=40,
+    )
+    charts.annotate(
+        fig,
+        mes(highest["m"]),
+        highest["value"] * 100,
+        f"se pasa {highest['value'] * 100:+.0f} %<br>→ sobra inventario",
+        ay=-40,
+    )
+    fig.update_layout(title=theme.title(
+        f"El promedio de {MA_WEEKS} semanas llega tarde a la temporada: {lowest['value'] * 100:+.0f} % en {mes(lowest['m'])}, "
+        f"{highest['value'] * 100:+.0f} % en {mes(highest['m'])}",
+        f"Sesgo del pronóstico por mes (pronóstico menos venta, sobre la venta); franja verde = ± {hi_band * 100:.0f} %; naranja = se queda corto, azul = se pasa"))  # fmt: skip
+    fig.update_yaxes(ticksuffix=" %", tickformat="+.0f", rangemode="normal")
+    md.append(charts.to_html(fig, height=380))
+
     fig = charts.line(
-        sw["week"], sw["value"],
-        conclusion=f"Stockouts peak at {pct(peak['value'])} in the week of {peak['week']:%d %b %Y}; "
-        + (
-            f"{pct(under_share)} of stockout days fall in under-forecast months"
-            if under_share >= 0.5
-            else f"only {pct(under_share)} fall in under-forecast months - the rest is demand variability "
-            "that no safety stock covers"
-        ),
-        subtitle="Weekly stockout rate (share of active SKU-days with zero stock)",
-        name="Stockout rate", yformat=".0%",
+        [fecha(w) for w in sw["semana"]], sw["value"],
+        conclusion=f"Los quiebres llegan a {pct(peak['value'])} en la semana del {fecha(peak['semana'])}; "
+        + (f"{pct(under_share)} de los días sin inventario caen en meses en que el pronóstico se quedó corto"
+           if under_share >= 0.5 else f"solo {pct(under_share)} caen en meses en que el pronóstico se quedó corto: el resto es variación de la demanda"),
+        subtitle="De cada 100 días-producto activos, en cuántos el producto terminó el día sin inventario, por semana",
+        name="Quiebres", pct=True,
     )  # fmt: skip
     charts.add_target(
-        fig, e.catalog["stockout_rate"].target, f"Target {pct(e.catalog['stockout_rate'].target)}"
+        fig,
+        e.catalog["stockout_rate"].target,
+        f"Meta {pct(e.catalog['stockout_rate'].target)}",
+        pct=True,
     )
-    for m in sorted(under_months):
-        fig.add_vrect(
-            x0=m,
-            x1=m + pd.offsets.MonthEnd(1),
-            fillcolor="rgba(235,104,52,0.08)",
-            line_width=0,
-            layer="below",
-        )
-    if under_months:
-        fig.add_annotation(x=max(under_months), y=1, yref="paper", text="shaded: under-forecast months", showarrow=False,
-                           xanchor="right", font=dict(color=theme.INK_2, size=11))  # fmt: skip
     md.append(charts.to_html(fig, height=340))
 
-    # 4 - why MAPE and WAPE disagree: APE by size of the weekly actual
     f = fc12[fc12["actual_units"] > 0].copy()
     f["ape"] = (f["actual_units"] - f["forecast_units"]).abs() / f["actual_units"]
-    edges = [0, 9, 49, 199, float("inf")]
-    labels = ["1-9 units", "10-49 units", "50-199 units", "200+ units"]
-    f["size"] = pd.cut(f["actual_units"], edges, labels=labels)
-    acc = f.groupby("size", observed=False).agg(
-        rows=("ape", "size"), mape=("ape", "mean"), units=("actual_units", "sum")
-    )
-    acc["row_share"] = acc["rows"] / acc["rows"].sum()
-    acc["unit_share"] = acc["units"] / acc["units"].sum()
-    small_rows = f["actual_units"] < 50
-    contrib = f.loc[small_rows, "ape"].sum() / f["ape"].sum()
+    labels = ["1 a 9 unidades", "10 a 49 unidades", "50 a 199 unidades", "200 o más unidades"]
+    f["tam"] = pd.cut(f["actual_units"], [0, 9, 49, 199, float("inf")], labels=labels)
+    acc = f.groupby("tam", observed=False).agg(filas=("ape", "size"), error=("ape", "mean"))
+    small = f["actual_units"] < 50
+    contrib = f.loc[small, "ape"].sum() / f["ape"].sum()
     fig = charts.bar(
-        labels, acc["mape"].values,
-        conclusion=f"MAPE says {pct(v['mape'])}, WAPE says {pct(v['wape'])}: the {pct(small_rows.mean())} of "
-        f"SKU-weeks selling under 50 units produce {pct(contrib)} of MAPE",
-        subtitle="Average absolute % error (MAPE) of SKU-weeks, by size of the actual weekly demand",
-        highlight={labels[0]}, horizontal=False,
-        text=[pct(m) for m in acc["mape"]],
+        labels, acc["error"].values,
+        conclusion=f"El error porcentual promedio dice {pct(H['mape'].value)} y el ponderado por volumen {pct(H['wape'].value)}: "
+        f"las semanas con menos de 50 unidades son {pct(small.mean())} de los casos y aportan {pct(contrib)} del error promedio",
+        subtitle="Error porcentual promedio de cada producto-semana, según cuánto se vendió esa semana",
+        highlight={labels[0]}, pct=True, horizontal=False, text=[pct(x) for x in acc["error"]],
     )  # fmt: skip
-    md.append(charts.to_html(fig, height=380, table=acc.reset_index().round(3)))
     md.append(
-        "MAPE gives every SKU-week the same vote, so small weeks - where missing by 5 units is a 100% error - "
-        "dominate it. WAPE weights errors by units, which is what stock and service feel.\n\n"
+        charts.to_html(
+            fig,
+            height=380,
+            table=pd.DataFrame(
+                {
+                    "Venta de la semana": labels,
+                    "Producto-semanas": acc["filas"].values,
+                    "Error promedio": [pct(v) for v in acc["error"]],
+                }
+            ),
+        )
+    )
+    md.append(
+        "El error porcentual promedio le da el mismo voto a cada producto-semana: en una semana de 5 unidades, fallar por 5 "
+        "es un error de 100 %. El error ponderado pesa por unidades, que es lo que sienten el inventario y el servicio.\n\n"
     )
 
-    # 5 - obsolescence
-    age_limit = e.catalog["obsolescence_share"].params["age_limit_days"]
-    snap2 = snap.assign(bucket=pd.cut(snap["days_since_last_movement"], [-1, 30, 90, age_limit, 10**6],
-                                      labels=["≤ 30 days", "31-90 days", f"91-{age_limit} days", f"> {age_limit} days"]))  # fmt: skip
-    val = snap2.groupby("bucket", observed=False)["on_hand_value"].sum()
-    old = snap2[snap2["days_since_last_movement"] > age_limit]
-    faded_old = old["sku_group"].eq("Faded").sum()
+    buckets = [
+        "30 días o menos",
+        "31 a 90 días",
+        f"91 a {age_limit} días",
+        f"más de {age_limit} días",
+    ]
+    snap2 = snap.assign(
+        tramo=pd.cut(
+            snap["days_since_last_movement"], [-1, 30, 90, age_limit, 10**6], labels=buckets
+        )
+    )
+    val = snap2.groupby("tramo", observed=False)["on_hand_value"].sum()
     fig = charts.bar(
-        [str(b) for b in val.index], val.values,
-        conclusion=f"{pct(v['obsolescence_share'])} of stock value has not moved for {age_limit}+ days - "
-        f"{faded_old} of those {len(old)} SKUs are faded items",
-        subtitle=f"Stock value at cost by days since the last sale, {end:%d %b %Y}",
-        highlight={f"> {age_limit} days"}, xformat=",.0f", horizontal=False, text=[f"{x:,.0f}" for x in val.values],
+        buckets, val.values,
+        conclusion=f"{pct(H['obsolescence_share'].value)} del valor del inventario no se vende hace más de {age_limit} días; "
+        f"{faded_old} de esos {len(old)} productos son artículos que dejaron de venderse",
+        subtitle=f"Valor del inventario a costo según los días desde la última venta, al {fecha(end)}",
+        highlight={buckets[-1]}, horizontal=False, decimals=0, text=[n(x) for x in val.values],
     )  # fmt: skip
     md.append(charts.to_html(fig, height=340))
 
-    # 6 - days of cover distribution
     last = daily[daily["date"] >= end - pd.Timedelta(days=55)]
-    best = snap.loc[snap["sku_group"].eq("Best seller"), "sku"]
+    best = snap.loc[snap["sku_group"].eq("Más vendido"), "sku"]
     cover = pd.Series(
         {s: e.compute("days_of_cover", last[last["sku"].eq(s)]) for s in best}
     ).replace(float("inf"), 999)
     g_lo, g_hi = e.catalog["days_of_cover"].thresholds["green"]
     low_n, high_n = int((cover < g_lo).sum()), int((cover > g_hi).sum())
     fig = go.Figure(go.Histogram(x=cover.clip(upper=120), xbins=dict(start=0, size=5), marker_color=theme.CONTEXT_DARK,
-                                 hovertemplate="%{x} days: %{y} SKUs<extra></extra>"))  # fmt: skip
+                                 hovertemplate="%{x} días: %{y} productos<extra></extra>"))  # fmt: skip
     charts.add_band(fig, g_lo, g_hi, axis="x")
     fig.add_annotation(
         x=(g_lo + g_hi) / 2,
         y=1,
         yref="paper",
-        text="target band",
+        text="franja meta",
         showarrow=False,
         font=dict(color=theme.INK_2),
     )
     fig.update_layout(title=theme.title(
-        f"Only {len(cover) - low_n - high_n} of {len(cover)} best sellers sit in the {g_lo:.0f}-{g_hi:.0f} day band: "
-        f"{low_n} too low, {high_n} too high",
-        f"Days of cover per SKU at {end:%d %b %Y} (demand of the last 8 weeks; values above 120 shown at 120)"))  # fmt: skip
-    fig.update_xaxes(title_text="days of cover")
-    fig.update_yaxes(title_text="SKUs")
+        f"Solo {len(cover) - low_n - high_n} de {len(cover)} productos más vendidos están entre {g_lo:.0f} y {g_hi:.0f} días de cobertura: "
+        f"{low_n} por debajo y {high_n} por encima",
+        f"Días de cobertura por producto al {fecha(end)} (con la demanda de las últimas 8 semanas; más de 120 se muestra como 120)"))  # fmt: skip
+    fig.update_xaxes(title_text="días de cobertura")
+    fig.update_yaxes(title_text="productos")
     md.append(charts.to_html(fig, height=340))
     md.append(
-        "A single fleet-level days-of-cover number nets these two tails against each other - that is why the "
-        "catalog defines it with a band and why the distribution is the recommended chart.\n\n"
+        "Un solo número de cobertura para toda la tienda compensa los dos extremos entre sí: por eso el catálogo lo define con una franja y lo muestra como distribución.\n\n"
     )
 
     md.append(
-        "## Decision\n\n"
-        "1. **Forecast the season, not the last 8 weeks.** For seasonal SKUs use last year's same weeks × trend "
-        "(or a seasonal model) from September; keep the moving average only for flat SKUs. Track **bias** "
-        "monthly - it is the error you can fix.\n"
-        "2. **Pre-build stock before the peak** for A-class seasonal SKUs, sized with the seasonal forecast "
-        "and the 10-17 day lead time, instead of reacting to stockouts in November.\n"
-        f"3. **Clear the {len(old)} SKUs without sales for {age_limit}+ days** (markdown, bundle or return) and "
-        "add a stop-ordering rule when a SKU's demand drops for 8 weeks.\n"
-        + (
-            "4. **Size safety stock per SKU** from demand variability and lead time instead of a flat 5 weeks: "
-            "most stockouts happen outside under-forecast months.\n"
-            if under_share < 0.5
-            else ""
-        )
-        + "4. **Split OTIF failures by owner** - short lines belong to planning (stock), late deliveries to "
-        f"logistics and the carrier. Today the largest group is '{top_fail.lower()}', so the first "
-        f"conversation is with {'logistics' if 'Late' in top_fail else 'planning'}.\n"
-        "5. **Report WAPE and bias as the headline accuracy KPIs**, MAPE only for the long tail.\n\n"
+        f"**La historia completa.** El pronóstico mira hacia atrás: antes de la temporada se queda corto y faltan productos; "
+        f"después de la temporada sigue alto y sobra inventario, que termina sin moverse. Al {fecha(end)}, {len(old)} productos "
+        f"no se venden hace más de {age_limit} días.\n\n"
     )
+    md.append("## Solución\n\n")
+    rows = [
+        ("Pronosticar los productos de temporada con las mismas semanas del año anterior y su tendencia, desde septiembre.", "Planificador de demanda", fecha(end + pd.Timedelta(days=30))),
+        ("Anticipar el inventario de los productos de temporada más vendidos antes del pico, según el nuevo pronóstico y el plazo del proveedor.", "Planificador de abastecimiento", fecha(end + pd.Timedelta(days=60))),
+        (f"Liquidar, agrupar o devolver los {len(old)} productos sin ventas en más de {age_limit} días y dejar de pedirlos.", "Controlador de inventarios", fecha(end + pd.Timedelta(days=30))),
+        (f"Separar las fallas de los pedidos por responsable: lo incompleto es de planificación y lo tardío de logística. Hoy la más común es «{top_fail.lower()}».", "Jefe de logística", fecha(end + pd.Timedelta(days=30))),
+    ]  # fmt: skip
+    if under_share < 0.5:
+        rows.append(
+            (
+                "Calcular el inventario de seguridad de cada producto según la variación de su demanda, en lugar de 5 semanas para todos.",
+                "Planificador de abastecimiento",
+                fecha(end + pd.Timedelta(days=45)),
+            )
+        )
+    md.append(decisiones(rows))
+    v = get_valores(t, e, manifest)["inventory"]
+    md.append(seccion_valor(e, v))
+    md.append(seccion_decision(e, v, rows[0][0]))
+    md.append("### Cómo lo seguimos midiendo\n\n")
+    md.append(seguimiento(e, [
+        ("forecast_bias", "Cada mes, por tipo de producto (avisa antes)", "Fuera de ± 10 % en un tipo de producto"),
+        ("days_of_cover", "Cada semana, por producto", "Menos de 7 días en un producto principal: acelerar el pedido"),
+        ("otif", "Cada semana, separando incompletos y tardíos", "Menos de 80 % dos semanas seguidas"),
+        ("stockout_rate", "Cada semana", "Más de 6 % en temporada"),
+        ("obsolescence_share", "Cada mes", "Más de 10 % del valor del inventario"),
+        ("wape", "Cada mes", "Más de 45 %"),
+    ]))  # fmt: skip
     md.append(
-        "## How we keep measuring\n\n"
-        + monitoring_table(
-            e,
-            [
-                ("forecast_bias", "Monthly, per SKU class (leading)", "Outside ±10% for a class"),
-                ("days_of_cover", "Weekly, per SKU", "Below 7 days on an A SKU - expedite"),
-                ("otif", "Weekly, split into short / late", "Below 80% for 2 weeks"),
-                ("stockout_rate", "Weekly", "Above 6% in season"),
-                ("obsolescence_share", "Monthly", "Above 10% of stock value"),
-                ("wape", "Monthly", "Above 45%"),
-            ],
-        )  # fmt: skip
+        detalle_tecnico(f"""
+- Demanda: {manifest["transactions"]["name"]} ({manifest["transactions"]["origin"]}). {manifest["transactions"]["note"]}.
+- Inventario, pronóstico y entregas: simulación con semilla fija (ver Fuentes de datos). Pronóstico = promedio móvil de {MA_WEEKS} semanas; pedido hasta {ORDER_UP_TO_WEEKS:.0f} semanas; demora del proveedor 10 a 17 días; lo que no hay en inventario se pierde.
+- Tablas `order_lines`, `inventory_daily`, `inventory_snapshot`, `forecast`; periodo de las tarjetas: {periodo}.
+- Pedidos completos y a tiempo: todas las líneas con `qty_shipped >= qty_ordered` y `delivered_date <= promised_date`.
+- Quiebres: solo días-producto con `active = True` (entre la primera y la última demanda del producto).
+- Solo semanas y meses completos en el pronóstico.
+""")
     )
     return "\n".join(md)

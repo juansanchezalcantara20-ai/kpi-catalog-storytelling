@@ -1,24 +1,11 @@
-# Case 3 · Inventory & demand
+# Caso 3 · Inventario y demanda
 
-**Real data:** [Online Retail II](https://archive.ics.uci.edu/dataset/502/online+retail+ii)
-(UCI, CC BY 4.0) - every invoice line of a UK online gift retailer, Dec 2009 - Dec 2011.
+**Datos reales:** [Online Retail II](https://archive.ics.uci.edu/dataset/502/online+retail+ii) (UCI, CC BY 4.0):
+todas las líneas de factura de una tienda en línea de regalos, dic 2009 – dic 2011.
 
-**Plan B:** `generate()` in `src/kpistory/data/retail.py`, seed `2011`: ~4,200
-customers with heterogeneous purchase rates and lifetimes, ~900 SKUs with
-Zipf-like popularity, a Q4 gift season, 15% Christmas SKUs, SKUs launched and
-faded over time, plus the real file's defects (24% guest invoices, 2%
-cancellations, postage lines, zero prices, 0.8% duplicates).
+**Plan B:** `src/kpistory/data/retail.py`, semilla `2011`: unos 4 200 clientes y 900 productos con temporada de fin de
+año y los mismos defectos del archivo real.
 
-**Stock simulation (always synthetic, seed 31)** - the public data has demand but not stock:
-
-| Element | Rule |
-|---|---|
-| SKUs | 40 best sellers by units + 8 "faded" SKUs (no sales in the last 200 days) |
-| Forecast | 8-week moving average of weekly demand, made the week before |
-| Replenishment | weekly review; order up to 5 weeks of forecast; lead time 10-17 days |
-| Service | demand not served from stock is lost; daily stock allocated first-come-first-served |
-| Delivery | promised in 3 days; transit 1-4 days, 15% of Nov-Dec parcels take 4-6 days |
-| Cost | 60% of the SKU's median selling price |
-
-**Reading the results:** demand is real when the download works; stock, forecast
-and delivery are a transparent simulation. Findings illustrate the method.
+**Simulación de inventario (siempre simulada, semilla 31):** los 40 productos más vendidos y 8 que dejaron de venderse;
+pronóstico = promedio de las últimas 8 semanas; revisión semanal, pedido hasta 5 semanas de pronóstico, proveedor de 10
+a 17 días; lo que no hay en inventario se pierde; entrega prometida en 3 días; costo = 60 % del precio mediano.

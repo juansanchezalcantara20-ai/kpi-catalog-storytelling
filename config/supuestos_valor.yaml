@@ -1,0 +1,113 @@
+# Supuestos económicos para traducir cada brecha a soles y horas.
+#
+# Todos son ILUSTRATIVOS: órdenes de magnitud razonables para mostrar el método, no datos de
+# ninguna empresa, cliente ni sueldo real. Cámbialos con los de tu empresa: el cálculo no cambia.
+# En la web, el simulador «¿y si…?» permite editarlos en vivo.
+#
+# Cada componente traduce un indicador a dinero así:
+#   unidades de más al mes = base mensual × brecha (distancia entre el valor y la meta, nunca negativa)
+#   costo al mes            = unidades de más × costo por unidad
+#   horas al mes            = unidades de más × horas por unidad
+
+moneda: "S/"
+tipo_cambio_gbp:
+  valor: 4.7
+  ilustrativo: true
+  explicacion: "Las ventas de Online Retail II están en libras; se convierten con 1 £ = S/ 4.70 solo para expresar todo en soles."
+
+casos:
+  service:
+    accion: "Reforzar el equipo con más pendientes antiguas y cerrar primero las solicitudes de más de 7 días."
+    responsable: "Jefe de la mesa de atención"
+    plazo_dias: 28
+    componentes:
+      - indicador: backlog_aged_share
+        base: solicitudes_abiertas
+        unidad: "solicitudes pendientes con más de 7 días"
+        costo_unitario: 60
+        ilustrativo: true
+        explicacion_costo: "Cada pendiente antigua genera llamadas de seguimiento, reclamos y a veces una compensación: S/ 60 al mes."
+        horas_unitarias: 2.0
+        explicacion_horas: "Dos horas al mes de un agente respondiendo seguimientos de cada pendiente antigua."
+      - indicador: sla_compliance
+        base: solicitudes_cerradas_mes
+        unidad: "solicitudes cerradas fuera de plazo"
+        costo_unitario: 45
+        ilustrativo: true
+        explicacion_costo: "Una solicitud fuera de plazo cuesta un reproceso y, a veces, una nota de crédito: S/ 45."
+        horas_unitarias: 1.5
+        explicacion_horas: "Hora y media de reproceso y comunicación por cada solicitud fuera de plazo."
+    efecto_decision: 0.6
+    explicacion_efecto: "Escenario: reforzar el equipo y limpiar pendientes cierra 60 % de la brecha en tres meses."
+
+  maintenance:
+    accion: "Cambiar la herramienta por uso (190 minutos), analizar la causa en las máquinas que más fallan y tener repuestos críticos."
+    responsable: "Jefe de mantenimiento"
+    plazo_dias: 30
+    componentes:
+      - indicador: availability
+        base: horas_programadas_mes
+        unidad: "horas de máquina parada"
+        costo_unitario: 450
+        ilustrativo: true
+        explicacion_costo: "Una hora de máquina parada cuesta producción perdida y horas extra para recuperarla: S/ 450."
+        horas_unitarias: 1.0
+        explicacion_horas: "Cada hora de parada ocupa una hora de técnico en la reparación."
+    efecto_decision: 0.5
+    explicacion_efecto: "Escenario: el cambio de herramienta por uso y los repuestos críticos cierran la mitad de la brecha en tres meses."
+
+  inventory:
+    accion: "Pronosticar la temporada con el año anterior y separar las fallas de los pedidos por responsable (planificación o logística)."
+    responsable: "Planificador de demanda"
+    plazo_dias: 30
+    componentes:
+      - indicador: otif
+        base: pedidos_mes
+        unidad: "pedidos incompletos o tardíos"
+        costo_unitario: 25
+        ilustrativo: true
+        explicacion_costo: "Un pedido incompleto o tardío cuesta un envío adicional, atención del reclamo y a veces un descuento: S/ 25."
+        horas_unitarias: 0.5
+        explicacion_horas: "Media hora de atención al cliente y logística por cada pedido con problema."
+      - indicador: obsolescence_share
+        base: valor_inventario_soles
+        unidad: "soles inmovilizados en productos sin movimiento"
+        costo_unitario: 0.02
+        ilustrativo: true
+        explicacion_costo: "Mantener inventario cuesta cerca de 25 % al año (almacén, capital, deterioro): 2 céntimos por sol al mes."
+        horas_unitarias: 0
+        explicacion_horas: "No se le asignan horas."
+    efecto_decision: 0.5
+    explicacion_efecto: "Escenario: el pronóstico de temporada y el inventario anticipado cierran la mitad de la brecha en tres meses."
+
+  customers:
+    accion: "Campaña de recuperación con la lista de clientes en riesgo, ordenada por ingreso, con llamada de un ejecutivo."
+    responsable: "Responsable de relación con clientes"
+    plazo_dias: 30
+    componentes:
+      - indicador: revenue_at_risk_share
+        base: ingreso_mes_soles
+        unidad: "soles de ingreso mensual en clientes en riesgo"
+        costo_unitario: 0.3
+        ilustrativo: true
+        explicacion_costo: "Si esos clientes se van, se pierde el margen de lo que compraban: 30 céntimos por sol."
+        horas_unitarias: 0
+        explicacion_horas: "No se le asignan horas."
+    efecto_decision: 0.4
+    explicacion_efecto: "Escenario: la campaña de recuperación recupera 40 % del ingreso en riesgo en tres meses."
+
+  data_quality:
+    accion: "Hacer obligatorio el cliente en la venta en línea y eliminar duplicados al cargar los datos."
+    responsable: "Jefe de ventas en línea"
+    plazo_dias: 60
+    componentes:
+      - indicador: dq_completeness
+        base: registros_ventas_mes
+        unidad: "registros de venta con datos faltantes"
+        costo_unitario: 4
+        ilustrativo: true
+        explicacion_costo: "Completar o corregir un registro a mano cuesta unos 6 minutos de un analista: S/ 4 por registro."
+        horas_unitarias: 0.1
+        explicacion_horas: "Seis minutos por registro buscado y corregido."
+    efecto_decision: 0.7
+    explicacion_efecto: "Escenario: hacer obligatorio el campo de cliente cierra 70 % de la brecha en tres meses."

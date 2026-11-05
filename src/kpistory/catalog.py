@@ -21,7 +21,7 @@ from typing import Any
 import jsonschema
 import yaml
 
-from .paths import CATALOG_PATH, SCHEMA_PATH
+from .paths import CATALOG_PATH, RUBROS_PATH, SCHEMA_PATH
 
 PARAM_REF = re.compile(r"\$\{([a-z_]+)\}")
 
@@ -36,7 +36,9 @@ class KPI:
     name: str
     case: str
     question: str
+    meaning: str
     definition: str
+    calculation: str
     formula: str
     unit: str
     granularity: str
@@ -48,10 +50,16 @@ class KPI:
     input: dict[str, Any]
     how_to_read: str
     misreadings: list[str]
+    decision: str
+    balance: str
+    target_why: str
     related: list[str]
     chart: dict[str, str]
+    tema: str = ""
+    rubros: list[str] = field(default_factory=list)
     sql: str | None = None
     params: dict[str, Any] = field(default_factory=dict)
+    metas_por_rubro: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def render(self, template: str | None) -> str | None:
         """Substitute ${param} references in a SQL template."""
@@ -84,6 +92,75 @@ class Catalog:
 
     def for_case(self, case: str) -> list[KPI]:
         return [k for k in self.kpis.values() if k.case == case]
+
+    def for_rubro(self, rubro: str) -> list[KPI]:
+        return [k for k in self.kpis.values() if rubro in k.rubros]
+
+    def for_tema(self, tema: str) -> list[KPI]:
+        return [k for k in self.kpis.values() if k.tema == tema]
+
+    def cases_for_rubro(self, rubro: str) -> list[str]:
+        return [c for c, d in self.cases.items() if rubro in d["rubros"]]
+
+
+@lru_cache(maxsize=1)
+def rubros_config() -> dict[str, Any]:
+    """config/rubros.yaml: the two axes of the site (sectors and themes)."""
+    with open(RUBROS_PATH, encoding="utf-8") as fh:
+        return yaml.safe_load(fh)
+
+
+def _axis_errors(raw: dict[str, Any]) -> list[str]:
+    """Rubros and temas exist; an «observado» result has a documented event; per-sector targets are coherent."""
+    cfg = rubros_config()
+    rubros, temas = set(cfg["rubros"]), set(cfg["temas"])
+    errors: list[str] = []
+    for cid, c in raw["cases"].items():
+        for r in c["rubros"]:
+            if r not in rubros:
+                errors.append(f"case {cid}: unknown rubro '{r}'")
+        if c["tema"] not in temas:
+            errors.append(f"case {cid}: unknown tema '{c['tema']}'")
+        if c["resultado"] == "observado" and not (c.get("evento") or {}).get("fuentes"):
+            errors.append(f"case {cid}: an «observado» result needs evento.fuentes")
+        roles = c["indicadores"]
+        for rol in ("resultado", "adelantados", "contrapeso"):
+            listed, pending = roles.get(rol, []), (roles.get("pendientes") or {}).get(rol)
+            if not listed and not pending:
+                errors.append(
+                    f"case {cid}: role '{rol}' needs KPIs or a pendientes text explaining why"
+                )
+            for kid in listed:
+                if kid not in {k["id"] for k in raw["kpis"]}:
+                    errors.append(f"case {cid}: role '{rol}' lists unknown KPI '{kid}'")
+        if c["resultado"] == "estimado" and c.get("evento"):
+            errors.append(f"case {cid}: an «estimado» result must not declare an evento")
+    for k in raw["kpis"]:
+        kid = k["id"]
+        if k["tema"] not in temas:
+            errors.append(f"{kid}: unknown tema '{k['tema']}'")
+        for r in k["rubros"]:
+            if r not in rubros:
+                errors.append(f"{kid}: unknown rubro '{r}'")
+        for r, m in (k.get("metas_por_rubro") or {}).items():
+            if r not in k["rubros"]:
+                errors.append(f"{kid}: metas_por_rubro for '{r}', which is not in its rubros")
+            if k["direction"] == "higher_is_better" and not (
+                m["target"] >= m["green"] >= m["amber"]
+            ):
+                errors.append(f"{kid}: metas_por_rubro[{r}] needs target >= green >= amber")
+            if k["direction"] == "lower_is_better" and not (
+                m["target"] <= m["green"] <= m["amber"]
+            ):
+                errors.append(f"{kid}: metas_por_rubro[{r}] needs target <= green <= amber")
+            if k["unit"] == "percent" and not all(
+                0 <= m[x] <= 1 for x in ("target", "green", "amber")
+            ):
+                errors.append(f"{kid}: metas_por_rubro[{r}] percent values must be fractions")
+    for r in rubros:
+        if not any(r in c["rubros"] for c in raw["cases"].values()):
+            errors.append(f"rubro '{r}' has no case")
+    return errors
 
 
 def _semantic_errors(raw: dict[str, Any]) -> list[str]:
@@ -149,7 +226,7 @@ def validate(raw: dict[str, Any], *, check_registry: bool = True) -> None:
         for e in sorted(validator.iter_errors(raw), key=lambda e: list(e.absolute_path))
     ]
     if not problems:
-        problems = _semantic_errors(raw)
+        problems = _semantic_errors(raw) + _axis_errors(raw)
     if not problems and check_registry:
         from .formulas import REGISTRY
 

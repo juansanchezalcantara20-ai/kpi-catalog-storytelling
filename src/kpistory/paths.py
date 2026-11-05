@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 KPIS_DIR = ROOT / "kpis"
 CATALOG_PATH = KPIS_DIR / "catalog.yaml"
 SCHEMA_PATH = KPIS_DIR / "catalog.schema.json"
+RUBROS_PATH = ROOT / "config" / "rubros.yaml"
 DQ_RULES_PATH = KPIS_DIR / "dq_rules.yaml"
 DATA_DIR = ROOT / "data"
 RAW_DIR = DATA_DIR / "raw"

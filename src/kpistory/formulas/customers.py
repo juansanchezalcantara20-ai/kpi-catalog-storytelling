@@ -11,12 +11,12 @@ PANDAS_PERIOD = {"MONTH": "M", "QUARTER": "Q", "YEAR": "Y"}
 
 # RFM segment rules on 1-5 scores (5 = best). Evaluated top to bottom; first match wins.
 RFM_SEGMENTS: list[tuple[str, str]] = [
-    ("Champions", "r >= 4 and f >= 4"),
-    ("Loyal", "r >= 3 and f >= 3"),
-    ("At risk", "r <= 2 and f >= 3"),
-    ("New / promising", "r >= 4 and f <= 2"),
-    ("Hibernating", "r <= 2 and f <= 2"),
-    ("Needs attention", "True"),
+    ("Campeones", "r >= 4 and f >= 4"),
+    ("Leales", "r >= 3 and f >= 3"),
+    ("En riesgo", "r <= 2 and f >= 3"),
+    ("Nuevos o prometedores", "r >= 4 and f <= 2"),
+    ("Dormidos", "r <= 2 and f <= 2"),
+    ("Requieren atención", "True"),
 ]
 
 
@@ -43,7 +43,7 @@ def rfm_table(sales: pd.DataFrame, snapshot: pd.Timestamp, window_days: int = 36
     rfm["r"] = _quintile_score(rfm["recency_days"], ascending=False)  # recent = high score
     rfm["f"] = _quintile_score(rfm["frequency"], ascending=True)
     rfm["m"] = _quintile_score(rfm["monetary"], ascending=True)
-    rfm["segment"] = "Needs attention"
+    rfm["segment"] = "Requieren atención"
     assigned = pd.Series(False, index=rfm.index)
     for name, rule in RFM_SEGMENTS:
         mask = rfm.eval(rule) & ~assigned if rule != "True" else ~assigned
@@ -84,7 +84,7 @@ def repeat_purchase_rate(df: pd.DataFrame) -> float:
 
 @kpi("revenue_at_risk_share")
 def revenue_at_risk_share(df: pd.DataFrame) -> float:
-    at_risk = df.loc[df["segment"].eq("At risk"), "monetary"].sum()
+    at_risk = df.loc[df["segment"].eq("En riesgo"), "monetary"].sum()
     return safe_ratio(at_risk, df["monetary"].sum())
 
 

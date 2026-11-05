@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "kpistory"
 version = "1.0.0"
-description = "One KPI catalog, one calculation engine, two presentation layers (static site + Power BI)."
+description = "Un catálogo de indicadores, un motor de cálculo y dos presentaciones: historias y tablero."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -22,13 +22,16 @@ dependencies = [
 
 [project.optional-dependencies]
 site = ["mkdocs>=1.6", "mkdocs-material>=9.5"]
-dev = ["pytest>=8", "ruff>=0.17,<0.18", "mkdocs>=1.6", "mkdocs-material>=9.5"]
+dev = ["pytest>=8", "ruff>=0.17,<0.18", "beautifulsoup4>=4.12", "mkdocs>=1.6", "mkdocs-material>=9.5"]
 
 [project.scripts]
 kpistory = "kpistory.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+kpistory = ["site/assets/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
