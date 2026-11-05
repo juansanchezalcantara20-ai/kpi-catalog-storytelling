@@ -44,6 +44,13 @@ def en_30_segundos(que_paso: str, por_que_importa: str, que_decidimos: str) -> s
 def aviso_datos(manifest: dict, keys: list[str]) -> str:
     """Data notice: real, real + simulation, or simulated - never a silent mix."""
     items = [manifest[k] for k in keys]
+    referencia = [m for m in items if m["origin"] == "real" and m.get("tipo") == "referencia"]
+    items = [m for m in items if m not in referencia]
+    ref = "".join(
+        f" **Conjunto público de referencia:** [{html.escape(m['name'])}]({m['url']}), descargado el {fecha(m['downloaded_at'])}; "
+        "su publicador lo describe como sintético, construido para parecerse a datos reales de mantenimiento."
+        for m in referencia
+    )
     reales = [m for m in items if m["origin"] == "real"]
     simulados = [m for m in items if m["origin"] != "real"]
     if reales:
@@ -65,7 +72,12 @@ def aviso_datos(manifest: dict, keys: list[str]) -> str:
                 )
                 + ". La parte simulada muestra el método; no describe una empresa real."
             )
-        return f'!!! info "De dónde salen estos datos"\n    {texto} Detalle en [Fuentes de datos](../data-sources.md).\n\n'
+        return f'!!! info "De dónde salen estos datos"\n    {texto}{ref} Detalle en [Fuentes de datos](../data-sources.md).\n\n'
+    if referencia:
+        return (
+            f'!!! warning "Datos simulados"\n    **Datos simulados: muestran el método, no describen una empresa real.**{ref} '
+            "Detalle en [Fuentes de datos](../data-sources.md).\n\n"
+        )
     return (
         '!!! warning "Datos simulados"\n'
         "    **Datos simulados: muestran el método, no describen una empresa real.** "
@@ -83,6 +95,7 @@ def tiles(engine: Engine, values: dict[str, Headline], ids: list[str], depth: in
     cards, tips = [], []
     for kid in ids:
         k = engine.catalog[kid]
+        rol = rol_de(engine, kid)
         h = values[kid]
         status = engine.status(kid, h.value)
         value = format_value(k, h.value) if not math.isnan(h.value) else "Sin dato"
@@ -92,7 +105,8 @@ def tiles(engine: Engine, values: dict[str, Headline], ids: list[str], depth: in
         cards.append(
             f'<a class="kpi-tile status-{status.replace("/", "")}" href="{up}catalog/{k.id}/" data-kpi="{k.id}" '
             f'data-tip aria-describedby="{tip_id}">'
-            f'<span class="kpi-name">{html.escape(k.name)}</span>'
+            + (f'<span class="kpi-rol rol-{rol}">{ROL_TEXTO[rol]}</span>' if rol else "")
+            + f'<span class="kpi-name">{html.escape(k.name)}</span>'
             f'<span class="kpi-value">{html.escape(value)}</span>'
             f'<span class="kpi-status" data-tip aria-describedby="{rule_id}">{theme.STATUS_ICON[status]} '
             f"{theme.STATUS_TEXT[status]} · meta {html.escape(format_threshold(k, with_alert=False))}</span>"
@@ -108,6 +122,20 @@ def tiles(engine: Engine, values: dict[str, Headline], ids: list[str], depth: in
         + "".join(tips)
         + "</div>\n\n"
     )
+
+
+ROL_TEXTO = {"resultado": "Resultado", "adelantados": "Adelantado", "contrapeso": "Contrapeso"}
+ROL_AYUDA = {
+    "resultado": "lo que se quiere lograr",
+    "adelantados": "se mueve antes que el resultado y avisa a tiempo",
+    "contrapeso": "evita mejorar un número a costa de otro",
+}
+
+
+def rol_de(engine: Engine, kid: str) -> str:
+    """Role of a KPI in its own case: resultado, adelantados or contrapeso ('' if none)."""
+    roles = engine.catalog.cases[engine.catalog[kid].case].get("indicadores", {})
+    return next((r for r in ROL_TEXTO if kid in roles.get(r, [])), "")
 
 
 def pregunta(text: str) -> str:
@@ -203,7 +231,14 @@ def seccion_valor(engine: Engine, v) -> str:
 
     from ..valor import money, units
 
-    md = ["## Lo que cuesta no actuar\n", valor_card(v)]
+    md = [
+        "## Resultado\n",
+        '!!! note "Resultado estimado (escenario)"\n'
+        "    Los datos terminan en la fecha de corte: no hay un «después» observado. Lo que sigue es un escenario "
+        "transparente, con supuestos escritos y editables, para estimar cuánto vale actuar.\n",
+        "### Lo que cuesta no actuar\n",
+        valor_card(v),
+    ]
     rows = [
         "| Indicador | Hoy | Meta | Base | De más al mes | Supuesto | Costo al mes |",
         "|---|---|---|---|---|---|---|",
@@ -252,7 +287,7 @@ def seccion_decision(engine: Engine, v, decision: str) -> str:
         if esc.es_ruido
         else f"el intervalo de 90 % va de {lo:+.1f} a {hi:+.1f} {unidad} y no incluye el cero: **no es ruido**, el cambio es real dentro del escenario."
     )
-    md = ["## De la decisión al resultado\n"]
+    md = ["### De la decisión al resultado\n"]
     md.append(
         f"- **Qué se decidió:** {decision}\n"
         f"- **Qué se esperaba:** {esc.explicacion}\n"

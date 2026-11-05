@@ -29,6 +29,7 @@ extra_css:
 extra_javascript:
   - assets/js/tooltips.js
   - assets/js/simulador.js
+  - assets/js/rubros.js
 
 markdown_extensions:
   - abbr
@@ -48,17 +49,32 @@ markdown_extensions:
       check_paths: true
 
 nav:
-  - Resumen para gerencia: resumen.md
   - Inicio: index.md
-  - Casos:
-      - 1 · Atención de solicitudes: cases/service.md
-      - 2 · Mantenimiento: cases/maintenance.md
-      - 3 · Inventario: cases/inventory.md
-      - 4 · Clientes: cases/customers.md
-      - 5 · Calidad de los datos: cases/data_quality.md
-  - Errores comunes al medir: antipatterns.md
-  - Catálogo de indicadores: catalog/index.md
+  - Resumen para gerencia: resumen.md
+  - Por rubro:
+      - Todos los rubros: rubros/index.md
+      - Banca, seguros y AFP: rubros/banca.md
+      - Retail: rubros/retail.md
+      - Logística y transporte: rubros/logistica.md
+      - Minería: rubros/mineria.md
+      - Telecomunicaciones: rubros/telecom.md
+      - Salud: rubros/salud.md
+      - Energía: rubros/energia.md
+      - Educación: rubros/educacion.md
+      - Servicios y atención: rubros/servicios.md
+  - Por tema:
+      - Todos los temas: temas/index.md
+      - Operaciones y procesos: temas/operaciones.md
+      - Costos y finanzas: temas/costos.md
+      - Cliente y calidad de servicio: temas/cliente.md
+      - Mantenimiento y activos: temas/mantenimiento.md
+      - Inventario y cadena de suministro: temas/inventario.md
+      - Personas: temas/personas.md
+      - Calidad de datos: temas/datos.md
+  - Catálogo: catalog/index.md
   - Tablero: dashboard/index.html
-  - Cómo leer este sitio: como-leer.md
-  - Fuentes de datos: data-sources.md
-  - Decisiones del proyecto: DECISIONS.md
+  - Cómo leer este sitio:
+      - Guía de lectura: como-leer.md
+      - Errores comunes al medir: antipatterns.md
+      - Decisiones del proyecto: DECISIONS.md
+  - Fuentes: data-sources.md

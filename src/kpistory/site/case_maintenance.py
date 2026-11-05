@@ -24,6 +24,7 @@ from .common import (
     tiles,
 )
 from .current import fecha, headline, mes
+from .plantilla import ficha
 
 TOOL_CHANGE_AT = 190  # minutes of tool wear: proposed condition-based tool change
 LONG_REPAIR_H = 12
@@ -76,8 +77,8 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     pm_red = [m for m in pm.index if e.status("pm_compliance", pm[m]) == "red"]
     end = pd.Timestamp(ap["month"].max()) + pd.offsets.MonthEnd(0)
 
-    md = ["# Caso 2 · Mantenimiento: ¿por qué las máquinas no están disponibles cuando se necesitan?\n",
-          aviso_datos(manifest, ["process_data", "work_orders"])]  # fmt: skip
+    md = ["# Mantenimiento: ¿por qué las máquinas no están disponibles cuando se necesitan?\n",
+          ficha("maintenance", manifest) + aviso_datos(manifest, ["process_data", "work_orders"])]  # fmt: skip
     md.append(en_30_segundos(
         f"La flota estuvo disponible {pct(H['availability'].value, 1)} del tiempo programado (meta {pct(a_target)}). "
         f"{len(worst)} de {N_MACHINES} máquinas ({names}) explican {pct(worst_down)} de las horas perdidas por fallas.",
@@ -87,15 +88,15 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         "más y tener repuestos críticos en almacén.",
     ))  # fmt: skip
     md.append(
-        "## El contexto\n\n"
+        "## Problema\n\n"
         f"Una planta opera **{N_MACHINES} máquinas** en dos turnos. Cada registro de los datos de proceso es una corrida "
         f"de producción de {RUN_HOURS:.0f} horas con la temperatura, la velocidad, el torque, el desgaste de la "
         f"herramienta y si hubo falla ({n(len(runs))} corridas). Cada falla abre una orden de reparación y cada máquina "
         "tiene un mantenimiento preventivo semanal.\n\n"
     )
-    md.append("## La pregunta del negocio\n\n" + pregunta(
+    md.append("### La pregunta del negocio\n\n" + pregunta(
         "¿Por qué la disponibilidad está bajo la meta: porque las máquinas fallan mucho o porque tardamos en repararlas?"))  # fmt: skip
-    md.append("## Los indicadores\n\n")
+    md.append("## Indicadores\n\n")
     md.append(tiles(e, H, ["availability", "mtbf", "mttr", "pm_compliance", "planned_work_share"]))
     md.append(
         "La disponibilidad es el resultado. Depende de dos cosas: **cada cuánto falla** una máquina (tiempo entre "
@@ -104,7 +105,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     )
 
     md.append(bloque_bala(e, H, ["availability", "mtbf", "mttr", "pm_compliance"]))
-    md.append("## Lo que encontramos\n\n")
+    md.append("## Análisis\n\n")
     ka = e.catalog["availability"]
     av_m = e.compute_by("availability", ap, "month")
     below_m = av_m[av_m["value"] < a_target]
@@ -247,7 +248,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         + "Las órdenes de trabajo son simuladas, así que esta página no afirma que el atraso de los preventivos cause las fallas.\n\n"
     )
 
-    md.append("## Qué decidimos\n\n")
+    md.append("## Solución\n\n")
     rows = [(f"Cambiar la herramienta a los {TOOL_CHANGE_AT} minutos de uso. En el periodo habría convertido {len(avoid)} fallas "
              f"(unas {avoid_h:.0f} horas de parada) en cambios planificados.", "Planificador de mantenimiento", fecha(end + pd.Timedelta(days=30)))]  # fmt: skip
     if falla_mucho:
@@ -286,7 +287,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     v = get_valores(t, e, manifest)["maintenance"]
     md.append(seccion_valor(e, v))
     md.append(seccion_decision(e, v, rows[0][0]))
-    md.append("## Cómo lo seguimos midiendo\n\n")
+    md.append("### Cómo lo seguimos midiendo\n\n")
     md.append(seguimiento(e, [
         ("pm_compliance", "Cada semana, por cuadrilla (avisa antes)", "Menos de 80 % en una cuadrilla: reprogramar la semana"),
         ("planned_work_share", "Cada mes", "Menos de 65 %: revisar las reparaciones de emergencia"),

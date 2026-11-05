@@ -36,7 +36,12 @@ def test_cada_indicador_tiene_su_tooltip_completo_y_en_espanol(kpi):
 # ------------------------------------------------------------------ supuestos de valor
 def test_cada_supuesto_tiene_fuente_o_es_ilustrativo():
     cfg = yaml.safe_load((ROOT / "config" / "supuestos_valor.yaml").read_text(encoding="utf-8"))
-    assert set(cfg["casos"]) == set(C.cases)
+    # Solo los casos con supuestos de costo defendibles tienen valor en soles; los demás muestran la alerta sin inventar un costo.
+    assert (
+        {"service", "maintenance", "inventory", "customers", "data_quality"}
+        <= set(cfg["casos"])
+        <= set(C.cases)
+    )
     for caso, spec in cfg["casos"].items():
         assert spec["componentes"], caso
         for comp in spec["componentes"]:
@@ -192,7 +197,7 @@ def test_tarjetas_con_tooltip_accesible():
 def test_los_textos_del_tablero_estan_en_espanol():
     _site()
     src = (SITE / "dashboard" / "index.html").read_text(encoding="utf-8")
-    for es in ("Tablero de indicadores", "Todos los dominios", "Cualquier estado", "En meta", "Vigilar", "Actuar",
+    for es in ("Tablero de indicadores", "Todos los rubros", "Todos los temas", "Cualquier estado", "En meta", "Vigilar", "Actuar",
                "Cómo leerlo", "Errores comunes de lectura", 'locale: "es"'):  # fmt: skip
         assert es in src, es
     for en in (

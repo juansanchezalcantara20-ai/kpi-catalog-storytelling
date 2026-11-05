@@ -16,17 +16,43 @@
 
 version: 1
 cases:
+  # resultado: «observado» solo si hay un evento documentado con su fuente (evento.fuentes);
+  # si no, «estimado» (un escenario transparente). fuentes: claves de config/fuentes.yaml.
   service:
     title: Atención de solicitudes
+    rubros: [servicios]
+    tema: cliente
+    resultado: estimado
+    fuentes: [solicitudes]
+    indicadores:
+      resultado: [sla_compliance, resolution_time]
+      adelantados: [backlog_aged_share, first_response_time]
+      contrapeso: [first_contact_resolution, reopen_rate]
     tables:
     - tickets
   maintenance:
     title: Mantenimiento de equipos
+    rubros: [mineria]
+    tema: mantenimiento
+    resultado: estimado
+    fuentes: [mantenimiento]
+    indicadores:
+      resultado: [availability]
+      adelantados: [pm_compliance, planned_work_share, mtbf]
+      contrapeso: [mttr]
     tables:
     - work_orders
     - asset_periods
   inventory:
     title: Inventario y demanda
+    rubros: [retail]
+    tema: inventario
+    resultado: estimado
+    fuentes: [ventas]
+    indicadores:
+      resultado: [otif, fill_rate]
+      adelantados: [wape, forecast_bias, mape, days_of_cover, stockout_rate]
+      contrapeso: [obsolescence_share, inventory_turnover]
     tables:
     - order_lines
     - inventory_daily
@@ -34,18 +60,130 @@ cases:
     - forecast
   customers:
     title: Clientes
+    rubros: [retail]
+    tema: cliente
+    resultado: estimado
+    fuentes: [ventas]
+    indicadores:
+      resultado: [retention_rate]
+      adelantados: [repeat_purchase_rate, revenue_at_risk_share]
+      contrapeso: [nps]
     tables:
     - sales
     - customer_rfm
     - survey
   data_quality:
     title: Calidad de los datos
+    rubros: [retail, mineria, servicios]
+    tema: datos
+    resultado: estimado
+    fuentes: [solicitudes, mantenimiento, ventas]
+    indicadores:
+      resultado: [dq_completeness]
+      adelantados: [dq_timeliness, dq_validity]
+      contrapeso: [dq_uniqueness]
     tables:
     - dq_results
+  banca:
+    title: Morosidad de créditos
+    rubros: [banca]
+    tema: costos
+    resultado: estimado
+    fuentes: [creditos]
+    indicadores:
+      resultado: [npl_ratio]
+      contrapeso: [loan_growth]
+      pendientes:
+        adelantados: Los créditos con 1 a 30 días de atraso anticiparían la morosidad, pero esta cartera simulada solo registra el saldo vencido.
+    tables:
+    - creditos
+  energia:
+    title: Generación eléctrica y combustibles fósiles
+    rubros: [energia]
+    tema: operaciones
+    resultado: observado
+    fuentes: [energia]
+    evento:
+      fecha: "2019-06-04"
+      grupo: Chile
+      texto: El Gobierno de Chile anunció el plan de retiro de centrales a carbón (ocho centrales en cinco años y retiro total al 2040), acordado con las generadoras.
+      fuentes:
+      - https://energia.gob.cl/node/17345
+      - https://www.emol.com/noticias/Economia/2019/06/04/950104/Gobierno-anuncia-la-salida-de-8-centrales-a-carbon-en-5-anos-y-la-meta-de-retiro-total-al-2040.html
+    indicadores:
+      resultado: [fossil_share_elec, carbon_intensity_elec]
+      adelantados: [renewable_share_elec]
+      pendientes:
+        contrapeso: La disponibilidad de las centrales y el precio de la tarifa equilibrarían la lectura, pero esta fuente no los registra.
+    tables:
+    - energia_anual
+  salud:
+    title: Vacunación y mortalidad
+    rubros: [salud]
+    tema: cliente
+    resultado: observado
+    fuentes: [vacunas, mortalidad]
+    evento:
+      fecha: "2021-02-09"
+      grupo: Perú
+      texto: El Ministerio de Salud del Perú inició la vacunación contra la COVID-19, empezando por el personal de salud de Lima y Callao.
+      fuentes:
+      - https://andina.pe/agencia/noticia-covid19-este-martes-se-inicia-proceso-vacunacion-lima-y-callao-832867.aspx
+      - https://elperuano.pe/noticia/114960-peru-inicia-plan-de-vacunacion-contra-covid-19
+    indicadores:
+      resultado: [deaths_per_million_week]
+      adelantados: [vaccination_complete_share]
+      pendientes:
+        contrapeso: Las atenciones postergadas (citas y cirugías que no se hicieron) equilibrarían la lectura, pero esta fuente no las registra.
+    tables:
+    - salud_semanal
+  telecom:
+    title: Líneas móviles y mercado
+    rubros: [telecom]
+    tema: cliente
+    resultado: estimado
+    fuentes: [moviles]
+    indicadores:
+      resultado: [mobile_penetration]
+      adelantados: [lines_growth]
+      pendientes:
+        contrapeso: La parte de clientes que se va cada mes equilibraría la lectura, pero esta fuente solo cuenta líneas activas.
+    tables:
+    - moviles_anual
+  educacion:
+    title: Alumnos por docente
+    rubros: [educacion]
+    tema: personas
+    resultado: estimado
+    fuentes: [docentes]
+    indicadores:
+      adelantados: [pupil_teacher_ratio]
+      pendientes:
+        resultado: El resultado que importa es el aprendizaje (pruebas estandarizadas), que no está en esta fuente.
+        contrapeso: El costo por alumno equilibraría la lectura, pero esta fuente no lo registra.
+    tables:
+    - docentes
+  logistica:
+    title: Puntualidad en el transporte
+    rubros: [logistica]
+    tema: operaciones
+    resultado: estimado
+    fuentes: [vuelos]
+    indicadores:
+      resultado: [on_time_share]
+      pendientes:
+        adelantados: El atraso del viaje anterior del mismo vehículo anticiparía el atraso, pero esta muestra no identifica vehículos.
+        contrapeso: El uso de la flota (horas en servicio) equilibraría la lectura, pero esta muestra no lo registra.
+    tables:
+    - vuelos
 kpis:
 - id: first_response_time
   name: Tiempo hasta la primera respuesta
   case: service
+  tema: operaciones
+  rubros: [banca, telecom, salud, educacion, servicios]
+  metas_por_rubro:
+    salud: {target: 1.0, green: 1.0, amber: 2.0, why: 'Una consulta de salud sin respuesta en una hora suele terminar en la emergencia.'}
   question: ¿Cuánto espera un cliente hasta que una persona le responde?
   meaning: Horas que pasan desde que llega la solicitud hasta la primera respuesta de una persona.
   definition: Mediana de horas entre la creación de la solicitud y la primera respuesta de un agente, sobre las
@@ -91,6 +229,8 @@ kpis:
 - id: resolution_time
   name: Tiempo de resolución
   case: service
+  tema: operaciones
+  rubros: [servicios]
   question: ¿Cuánto tardamos en resolver el problema del cliente de principio a fin?
   meaning: Horas desde que llega la solicitud hasta que queda resuelta; se usa el valor típico (la mediana).
   definition: Mediana de horas desde la creación hasta la resolución, sobre las solicitudes ya resueltas.
@@ -140,6 +280,11 @@ kpis:
 - id: sla_compliance
   name: Cumplimiento del plazo comprometido
   case: service
+  tema: cliente
+  rubros: [banca, telecom, salud, educacion, servicios]
+  metas_por_rubro:
+    banca: {target: 0.95, green: 0.95, amber: 0.9, why: 'Los reclamos financieros tienen plazos regulados; el margen es menor que en otros rubros.'}
+    salud: {target: 0.85, green: 0.85, amber: 0.75, why: 'Las citas dependen de la disponibilidad de especialistas; una meta más alta empuja a cerrar sin atender.'}
   question: ¿Qué parte de las solicitudes resolvimos dentro del plazo que prometimos?
   meaning: De cada 100 solicitudes cerradas, cuántas se resolvieron dentro del plazo comprometido con el cliente
     (SLA) según su urgencia.
@@ -182,6 +327,8 @@ kpis:
 - id: backlog_aged_share
   name: Pendientes con más de 7 días
   case: service
+  tema: operaciones
+  rubros: [salud, servicios]
   question: ¿Qué parte del trabajo pendiente ya es tan antiguo que pone en riesgo el plazo?
   meaning: De las solicitudes que siguen abiertas al cierre, qué parte lleva más de 7 días esperando.
   definition: Solicitudes abiertas a la fecha de corte con más días de antigüedad que el límite, dividido entre
@@ -227,6 +374,8 @@ kpis:
 - id: first_contact_resolution
   name: Resuelto en el primer contacto
   case: service
+  tema: cliente
+  rubros: [banca, telecom, servicios]
   question: ¿Con qué frecuencia resolvemos el problema en una sola interacción?
   meaning: De cada 100 solicitudes cerradas, cuántas se resolvieron en el primer contacto, sin volver a llamar y
     sin reabrirse.
@@ -271,6 +420,8 @@ kpis:
 - id: reopen_rate
   name: Tasa de reapertura
   case: service
+  tema: cliente
+  rubros: [telecom, servicios]
   question: ¿Con qué frecuencia una solicitud «resuelta» en realidad no lo estaba?
   meaning: De cada 100 solicitudes cerradas, cuántas tuvieron que reabrirse porque el problema seguía.
   definition: Solicitudes resueltas que se reabrieron al menos una vez, dividido entre todas las resueltas.
@@ -310,6 +461,8 @@ kpis:
 - id: mtbf
   name: Tiempo medio entre fallas
   case: maintenance
+  tema: mantenimiento
+  rubros: [logistica, mineria, energia]
   question: ¿Cuánto tiempo funciona un equipo, en promedio, antes de fallar?
   meaning: Horas de operación que pasan, en promedio, entre una falla y la siguiente. Más alto es mejor.
   definition: Horas totales de operación divididas entre el número de fallas en el mismo periodo y alcance.
@@ -350,6 +503,8 @@ kpis:
 - id: mttr
   name: Tiempo medio de reparación
   case: maintenance
+  tema: mantenimiento
+  rubros: [logistica, mineria, energia]
   question: Cuando un equipo falla, ¿cuánto tarda en volver a funcionar?
   meaning: Horas promedio que dura una reparación, desde la falla hasta que el equipo vuelve a operar. Más bajo
     es mejor.
@@ -391,6 +546,11 @@ kpis:
 - id: availability
   name: Disponibilidad
   case: maintenance
+  tema: mantenimiento
+  rubros: [logistica, mineria, energia]
+  metas_por_rubro:
+    mineria: {target: 0.85, green: 0.85, amber: 0.8, why: 'Los equipos de carguío y acarreo trabajan en condiciones duras; 85 % es una referencia exigente para flota pesada.'}
+    energia: {target: 0.95, green: 0.95, amber: 0.92, why: 'Una central fuera de servicio se reemplaza con otra más cara; la exigencia es mayor.'}
   question: Del tiempo en que el equipo debía funcionar, ¿cuánto pudo funcionar de verdad?
   meaning: De cada 100 horas programadas para producir, cuántas el equipo estuvo funcionando (sin contar las paradas
     planificadas).
@@ -433,6 +593,8 @@ kpis:
 - id: pm_compliance
   name: Cumplimiento del mantenimiento preventivo
   case: maintenance
+  tema: mantenimiento
+  rubros: [mineria, energia]
   question: ¿Hacemos el mantenimiento preventivo que planificamos, cuando lo planificamos?
   meaning: De cada 100 mantenimientos preventivos programados, cuántos se hicieron a tiempo (hasta 3 días después
     de la fecha).
@@ -480,6 +642,8 @@ kpis:
 - id: planned_work_share
   name: Trabajo de mantenimiento planificado
   case: maintenance
+  tema: mantenimiento
+  rubros: [mineria]
   question: ¿Qué parte del esfuerzo de mantenimiento es planificado y no una reacción a fallas?
   meaning: De cada 100 horas de mantenimiento, cuántas fueron trabajo planificado y no reparaciones de emergencia.
   definition: Horas de trabajo en órdenes planificadas divididas entre todas las horas de mantenimiento.
@@ -520,6 +684,8 @@ kpis:
 - id: fill_rate
   name: Unidades atendidas
   case: inventory
+  tema: inventario
+  rubros: [retail, logistica]
   question: De las unidades que pidieron los clientes, ¿cuántas despachamos?
   meaning: De cada 100 unidades pedidas, cuántas se despacharon desde el inventario.
   definition: Unidades despachadas divididas entre unidades pedidas.
@@ -559,6 +725,10 @@ kpis:
 - id: otif
   name: Pedidos completos y a tiempo
   case: inventory
+  tema: inventario
+  rubros: [retail, logistica]
+  metas_por_rubro:
+    logistica: {target: 0.95, green: 0.95, amber: 0.9, why: 'Para un operador logístico la entrega a tiempo es el producto que vende.'}
   question: ¿Cuántos pedidos llegaron completos y en la fecha prometida?
   meaning: De cada 100 pedidos, cuántos llegaron con todas sus líneas completas y a tiempo.
   definition: Pedidos cuyas líneas se entregaron todas a más tardar en la fecha prometida y con la cantidad completa,
@@ -606,6 +776,8 @@ kpis:
 - id: inventory_turnover
   name: Rotación del inventario
   case: inventory
+  tema: inventario
+  rubros: [retail]
   question: ¿Cuántas veces al año vendemos el inventario que mantenemos?
   meaning: Cuántas veces al año se vende (a costo) el valor promedio del inventario. Más alto significa menos capital
     inmovilizado.
@@ -649,6 +821,8 @@ kpis:
 - id: days_of_cover
   name: Días de cobertura
   case: inventory
+  tema: inventario
+  rubros: [retail]
   question: Si la demanda sigue igual, ¿para cuántos días alcanza el inventario actual?
   meaning: Días que duraría el inventario de hoy con la demanda diaria promedio. Debe quedar dentro de una franja.
   definition: Unidades en inventario a la última fecha divididas entre la demanda diaria promedio del periodo.
@@ -695,6 +869,8 @@ kpis:
 - id: stockout_rate
   name: Quiebres de stock
   case: inventory
+  tema: inventario
+  rubros: [retail, mineria]
   question: ¿Con qué frecuencia un producto simplemente no está disponible?
   meaning: De cada 100 días-producto en que el producto está activo, en cuántos terminó el día sin inventario.
   definition: Días-producto del surtido activo con inventario cero al cierre del día, divididos entre todos los
@@ -736,6 +912,8 @@ kpis:
 - id: obsolescence_share
   name: Inventario sin movimiento
   case: inventory
+  tema: inventario
+  rubros: [retail]
   question: ¿Qué parte del valor de nuestro inventario dejó de moverse?
   meaning: Del valor total del inventario, qué parte está en productos que no se venden hace más de 180 días.
   definition: Valor del inventario sin movimiento por más del límite de días, dividido entre el valor total del
@@ -779,6 +957,8 @@ kpis:
 - id: mape
   name: Error porcentual promedio del pronóstico
   case: inventory
+  tema: inventario
+  rubros: [retail]
   question: En promedio, ¿por qué porcentaje falla el pronóstico de cada producto?
   meaning: Error del pronóstico en porcentaje, promediando cada producto-semana por igual. Lo dominan las semanas
     de poca venta.
@@ -820,6 +1000,8 @@ kpis:
 - id: wape
   name: Error del pronóstico ponderado por volumen
   case: inventory
+  tema: inventario
+  rubros: [retail]
   question: De todas las unidades vendidas, ¿cuántas se equivocó el pronóstico?
   meaning: De cada 100 unidades vendidas, cuántas estuvieron mal pronosticadas (de más o de menos).
   definition: Suma de los errores absolutos dividida entre la suma de lo vendido.
@@ -858,6 +1040,8 @@ kpis:
 - id: forecast_bias
   name: Sesgo del pronóstico
   case: inventory
+  tema: inventario
+  rubros: [retail]
   question: ¿Pronosticamos sistemáticamente de más o de menos?
   meaning: Cuánto se pasa (positivo) o se queda corto (negativo) el pronóstico frente a lo vendido. Lo ideal es
     cerca de cero.
@@ -901,6 +1085,8 @@ kpis:
 - id: retention_rate
   name: Clientes que vuelven a comprar
   case: customers
+  tema: cliente
+  rubros: [banca, retail, telecom]
   question: De los clientes que compraron el trimestre pasado, ¿cuántos volvieron a comprar este trimestre?
   meaning: De cada 100 clientes que compraron en un trimestre, cuántos volvieron a comprar en el siguiente.
   definition: Clientes activos en el trimestre anterior y en el actual, divididos entre los clientes activos en
@@ -942,6 +1128,8 @@ kpis:
 - id: repeat_purchase_rate
   name: Clientes con más de una compra
   case: customers
+  tema: cliente
+  rubros: [retail]
   question: ¿Qué parte de los clientes vuelve por una segunda compra?
   meaning: De cada 100 clientes del último año, cuántos compraron dos veces o más.
   definition: Clientes con dos o más facturas en la ventana de 12 meses, divididos entre los clientes con al menos
@@ -982,6 +1170,8 @@ kpis:
 - id: revenue_at_risk_share
   name: Ingreso en riesgo
   case: customers
+  tema: costos
+  rubros: [banca, retail]
   question: ¿Cuánto de nuestro ingreso viene de buenos clientes que dejaron de comprar?
   meaning: Del ingreso del último año, qué parte vino de clientes buenos que ahora están inactivos («en riesgo»).
   definition: Ingreso de los últimos 12 meses de los clientes del segmento «en riesgo» (compraban seguido y bastante,
@@ -1024,6 +1214,8 @@ kpis:
 - id: nps
   name: Recomendación de clientes (encuesta simulada)
   case: customers
+  tema: cliente
+  rubros: [banca, retail, telecom, educacion, servicios]
   question: ¿Nos recomendarían nuestros clientes?
   meaning: Porcentaje de clientes que nos recomendarían (nota 9–10) menos el de los que hablarían mal (nota 0–6).
     Va de −100 a +100.
@@ -1065,6 +1257,8 @@ kpis:
 - id: dq_completeness
   name: Completitud de los datos
   case: data_quality
+  tema: datos
+  rubros: [banca, retail, mineria, salud, educacion, servicios]
   question: ¿Están llenos los campos que necesitamos?
   meaning: De cada 100 celdas obligatorias, cuántas tienen un valor.
   definition: Celdas no vacías en las columnas obligatorias divididas entre todas las celdas obligatorias.
@@ -1099,6 +1293,8 @@ kpis:
 - id: dq_uniqueness
   name: Unicidad de los datos
   case: data_quality
+  tema: datos
+  rubros: [retail, mineria, servicios]
   question: ¿Cada registro real está guardado una sola vez?
   meaning: De cada 100 filas, cuántas corresponden a un registro distinto (sin duplicados).
   definition: Claves de negocio distintas divididas entre el número de filas.
@@ -1131,6 +1327,8 @@ kpis:
 - id: dq_validity
   name: Validez de los datos
   case: data_quality
+  tema: datos
+  rubros: [retail, mineria, educacion, servicios]
   question: ¿Los valores respetan las reglas del negocio?
   meaning: De cada 100 filas, cuántas cumplen todas las reglas (por ejemplo, cantidad mayor que cero).
   definition: Filas que cumplen todas las reglas de validez del conjunto de datos divididas entre todas las filas.
@@ -1164,6 +1362,8 @@ kpis:
 - id: dq_timeliness
   name: Oportunidad de los datos
   case: data_quality
+  tema: datos
+  rubros: [retail, logistica, mineria, salud, servicios]
   question: ¿Los datos llegan a tiempo para poder actuar?
   meaning: De cada 100 registros, cuántos se cargaron en el sistema dentro de las 24 horas siguientes al hecho.
   definition: Registros cargados dentro del plazo permitido después del hecho de negocio, divididos entre todos
@@ -1196,3 +1396,377 @@ kpis:
   chart:
     type: heatmap
     why: La misma cuadrícula que las otras dimensiones.
+
+# ------------------------------------------------------------------ indicadores por rubro
+- id: npl_ratio
+  name: Morosidad de la cartera
+  case: banca
+  tema: costos
+  rubros: [banca]
+  question: ¿Qué parte del dinero prestado ya no se está pagando a tiempo?
+  meaning: Parte del saldo de créditos que tiene cuotas vencidas o está en cobranza judicial.
+  definition: Saldo de créditos atrasados (vencidos y en cobranza judicial) dividido entre el saldo total de créditos, al cierre del mes.
+  calculation: Se suma el saldo atrasado de todos los créditos y se divide entre la suma del saldo total prestado.
+  formula: sum(overdue_balance) / sum(loan_balance)
+  unit: percent
+  granularity: Una fila por mes, tipo de entidad, segmento y región; se revisa cada mes por segmento.
+  direction: lower_is_better
+  target: 0.04
+  thresholds:
+    green: 0.04
+    amber: 0.06
+  target_why: Cuatro por ciento es una referencia ilustrativa para una cartera mixta de consumo y pequeña empresa; por encima, las provisiones se comen el margen.
+  owner: Gerente de riesgos de crédito
+  source: Cartera de créditos (simulada)
+  input:
+    table: creditos
+    columns: [loan_balance, overdue_balance]
+  how_to_read: Mírela siempre por segmento y tipo de entidad, y en el tiempo. Un total estable puede esconder un segmento que se deteriora mes a mes.
+  misreadings:
+  - 'Celebrar que bajó porque la cartera creció: los créditos nuevos todavía no han tenido tiempo de atrasarse.'
+  - 'Comparar entidades de distinto tamaño por el monto atrasado y no por el porcentaje.'
+  decision: Endurecer la admisión o reforzar la cobranza temprana en el segmento que se aleja de la meta.
+  balance: 'Se equilibra con el crecimiento de la cartera y con «clientes que vuelven»: una admisión demasiado estricta baja la morosidad y también el negocio.'
+  related: [revenue_at_risk_share, retention_rate]
+  chart:
+    type: small_multiples
+    why: Un panel por segmento con la misma escala muestra cuál se deteriora sin que el total lo esconda.
+  sql: SELECT SUM(overdue_balance) * 1.0 / SUM(loan_balance) FROM creditos
+- id: renewable_share_elec
+  name: Electricidad de fuentes renovables
+  case: energia
+  tema: operaciones
+  rubros: [energia]
+  question: ¿Qué parte de la electricidad se genera con agua, sol, viento u otras fuentes renovables?
+  meaning: Porcentaje de la electricidad generada en el año que viene de fuentes renovables.
+  definition: Electricidad generada con fuentes renovables (hidráulica, solar, eólica, biomasa y otras) dividida entre toda la electricidad generada, en el año.
+  calculation: Se suman los teravatios hora renovables y se dividen entre los teravatios hora generados en total.
+  formula: sum(renewables_twh) / sum(generation_twh)
+  unit: percent
+  granularity: Una fila por país y año; se revisa cada año.
+  direction: higher_is_better
+  target: 0.6
+  thresholds:
+    green: 0.6
+    amber: 0.5
+  target_why: Sesenta por ciento es una referencia ilustrativa; la mayoría de los sistemas de Sudamérica ya está cerca gracias a la generación hidráulica.
+  owner: Planeamiento de la generación
+  source: Our World in Data, datos de energía
+  input:
+    table: energia_anual
+    columns: [renewables_twh, generation_twh]
+  how_to_read: Compare varios años. La generación hidráulica sube y baja con las lluvias, así que un año aislado no es una tendencia.
+  misreadings:
+  - 'Leer un año seco como un retroceso de la política energética.'
+  - 'Confundir electricidad con toda la energía que consume un país.'
+  decision: Priorizar contratos y nuevas centrales renovables cuando la participación se estanca.
+  balance: 'Se equilibra con la disponibilidad de las centrales: más renovable intermitente exige respaldo disponible.'
+  related: [fossil_share_elec, carbon_intensity_elec]
+  chart:
+    type: line
+    why: Una línea por grupo a lo largo de los años muestra la tendencia sin confundirla con un año aislado.
+  sql: SELECT SUM(renewables_twh) / SUM(generation_twh) FROM energia_anual
+- id: fossil_share_elec
+  name: Electricidad de combustibles fósiles
+  case: energia
+  tema: costos
+  rubros: [energia]
+  question: ¿Qué tan expuesta está la generación eléctrica al precio del carbón, el gas y el petróleo?
+  meaning: Porcentaje de la electricidad generada en el año que viene de carbón, gas o petróleo.
+  definition: Electricidad generada con carbón, gas natural y petróleo dividida entre toda la electricidad generada, en el año.
+  calculation: Se suman los teravatios hora fósiles y se dividen entre los teravatios hora generados en total.
+  formula: sum(fossil_twh) / sum(generation_twh)
+  unit: percent
+  granularity: Una fila por país y año; se revisa cada año.
+  direction: lower_is_better
+  target: 0.4
+  thresholds:
+    green: 0.4
+    amber: 0.5
+  target_why: Por encima de 40 % el costo de la electricidad sigue de cerca el precio internacional del combustible (referencia ilustrativa).
+  owner: Planeamiento de la generación
+  source: Our World in Data, datos de energía
+  input:
+    table: energia_anual
+    columns: [fossil_twh, generation_twh]
+  how_to_read: Es casi el complemento de la renovable (más la nuclear, si existe). Mírela junto con qué combustible fósil domina.
+  misreadings:
+  - 'Sumar gas y carbón como si fueran iguales: el carbón emite casi el doble por unidad de electricidad.'
+  - 'Concluir por un solo año sin mirar la tendencia.'
+  decision: Programar el retiro o la reconversión de las centrales más caras y contaminantes.
+  balance: 'Se equilibra con la seguridad del suministro: retirar centrales sin reemplazo disponible arriesga cortes.'
+  related: [renewable_share_elec, carbon_intensity_elec]
+  chart:
+    type: line
+    why: La tendencia por grupo muestra cuándo empezó el cambio.
+  sql: SELECT SUM(fossil_twh) / SUM(generation_twh) FROM energia_anual
+- id: carbon_intensity_elec
+  name: Emisiones por unidad de electricidad
+  case: energia
+  tema: operaciones
+  rubros: [energia]
+  question: ¿Cuánto CO₂ se emite por cada kilovatio hora generado?
+  meaning: Gramos de CO₂ equivalente emitidos por cada kilovatio hora de electricidad generada.
+  definition: Promedio de la intensidad de carbono de cada país y año, ponderado por la electricidad que generó.
+  calculation: Se multiplica la intensidad de cada fila por su generación, se suma y se divide entre la generación total.
+  formula: sum(carbon_intensity * generation_twh) / sum(generation_twh)
+  unit: g_per_kwh
+  granularity: Una fila por país y año; se revisa cada año.
+  direction: lower_is_better
+  target: 250
+  thresholds:
+    green: 250
+    amber: 350
+  target_why: Doscientos cincuenta gramos por kilovatio hora es una referencia ilustrativa por debajo del promedio mundial de los últimos años.
+  owner: Gestión ambiental
+  source: Our World in Data, datos de energía
+  input:
+    table: energia_anual
+    columns: [carbon_intensity, generation_twh]
+  how_to_read: Baja cuando entra generación renovable o cuando el gas reemplaza al carbón. Compárela con la participación fósil para saber cuál de los dos pasó.
+  misreadings:
+  - 'Promediar países sin ponderar: un país pequeño pesaría lo mismo que uno grande.'
+  - 'Leerla como emisiones totales: un país puede emitir más en total y aun así bajar su intensidad.'
+  decision: Usar la intensidad para priorizar qué centrales retirar primero.
+  balance: 'Se equilibra con el costo de la electricidad: bajar emisiones a cualquier precio puede encarecer la tarifa.'
+  related: [fossil_share_elec, renewable_share_elec]
+  chart:
+    type: line
+    why: La tendencia anual contra la meta muestra el ritmo de la transición.
+  sql: SELECT SUM(carbon_intensity * generation_twh) / SUM(generation_twh) FROM energia_anual
+- id: vaccination_complete_share
+  name: Población con vacunación completa
+  case: salud
+  tema: cliente
+  rubros: [salud]
+  question: ¿Qué parte de la población ya está protegida con el esquema completo de vacunación?
+  meaning: Porcentaje de la población que recibió todas las dosis del esquema inicial, al cierre del periodo.
+  definition: Personas con el esquema inicial completo dividido entre la población, tomando la última semana de cada país o región.
+  calculation: Para cada país se toma la última semana con dato; se suman las personas con esquema completo y se dividen entre la suma de la población.
+  formula: sum(fully_vaccinated at last week) / sum(population at last week)
+  unit: percent
+  granularity: Una fila por país y semana; se revisa cada semana durante una campaña.
+  direction: higher_is_better
+  target: 0.7
+  thresholds:
+    green: 0.7
+    amber: 0.5
+  target_why: Setenta por ciento fue una referencia usada por organismos de salud durante la pandemia; aquí es ilustrativa.
+  owner: Dirección de inmunizaciones
+  source: Our World in Data, vacunación COVID-19
+  input:
+    table: salud_semanal
+    columns: [country, week, fully_vaccinated, population]
+  how_to_read: Es un indicador acumulado, solo sube. Su ritmo de avance semanal es lo que dice si la campaña va bien.
+  misreadings:
+  - 'Comparar dosis aplicadas entre países: un país con más refuerzos parece más avanzado sin estarlo.'
+  - 'Leerlo como causa directa de menos muertes: coincide en el tiempo con otros cambios (variantes, medidas).'
+  decision: Mover vacunadores y horarios a las zonas o grupos de edad que avanzan más lento.
+  balance: 'Se equilibra con la mortalidad semanal: la cobertura es el medio, la mortalidad es el resultado.'
+  related: [deaths_per_million_week]
+  chart:
+    type: line
+    why: Una línea acumulada por país con la meta muestra el ritmo de la campaña.
+- id: deaths_per_million_week
+  name: Muertes semanales por millón de habitantes
+  case: salud
+  tema: cliente
+  rubros: [salud]
+  question: ¿Cuántas personas mueren por la enfermedad cada semana, en proporción a la población?
+  meaning: Muertes confirmadas por la enfermedad en una semana por cada millón de habitantes.
+  definition: Suma de muertes confirmadas dividida entre la suma de la población de las filas (país y semana), por un millón.
+  calculation: Se suman las muertes de todas las semanas y países del periodo y se dividen entre la suma de la población de esas mismas filas; se multiplica por un millón.
+  formula: sum(deaths) / sum(population) * 1e6
+  unit: per_million
+  granularity: Una fila por país y semana; se revisa cada semana.
+  direction: lower_is_better
+  target: 5
+  thresholds:
+    green: 5
+    amber: 20
+  target_why: Cinco por millón por semana es una referencia ilustrativa de una situación controlada; por encima de 20 los servicios de salud se saturan.
+  owner: Dirección de epidemiología
+  source: Our World in Data, muertes confirmadas por COVID-19
+  input:
+    table: salud_semanal
+    columns: [deaths, population]
+  how_to_read: Compare siempre por millón de habitantes, nunca en números absolutos. El registro de muertes llega con atraso, así que las últimas semanas suelen subir después.
+  misreadings:
+  - 'Comparar muertes totales entre países de distinto tamaño.'
+  - 'Leer la última semana como definitiva: el registro se completa con semanas de atraso.'
+  decision: Activar camas, personal y medidas de prevención cuando la serie cruza el margen de alerta.
+  balance: 'Se equilibra con la cobertura de vacunación: si la mortalidad baja pero la cobertura se estanca, el riesgo vuelve.'
+  related: [vaccination_complete_share]
+  chart:
+    type: line
+    why: La serie semanal con el evento anotado muestra qué pasó antes y después.
+  sql: SELECT SUM(deaths) * 1000000.0 / SUM(population) FROM salud_semanal
+- id: mobile_penetration
+  name: Líneas móviles por cada 100 habitantes
+  case: telecom
+  tema: cliente
+  rubros: [telecom]
+  question: ¿Cuánto mercado de telefonía móvil queda por ganar?
+  meaning: Cantidad de líneas de telefonía móvil activas por cada 100 habitantes.
+  definition: Suma de las líneas móviles dividida entre la suma de la población, por 100, en el año.
+  calculation: Se suman las líneas de todos los países del grupo y se dividen entre la suma de su población; se multiplica por 100.
+  formula: sum(lines) / sum(population) * 100
+  unit: per_100
+  granularity: Una fila por país y año; se revisa cada año.
+  direction: higher_is_better
+  target: 100
+  thresholds:
+    green: 100
+    amber: 90
+  target_why: Cien líneas por cada 100 habitantes es la referencia ilustrativa de un mercado maduro, donde crecer exige quitar clientes a la competencia.
+  owner: Gerencia comercial
+  source: Unión Internacional de Telecomunicaciones, vía Our World in Data
+  input:
+    table: moviles_anual
+    columns: [lines, population]
+  how_to_read: Por encima de 100 el mercado está maduro; el crecimiento viene de mejores planes o de quitar clientes, no de personas nuevas.
+  misreadings:
+  - 'Leer 100 líneas por cada 100 habitantes como que todos tienen celular: hay personas con dos líneas y otras sin ninguna.'
+  - 'Promediar países sin ponderar por población.'
+  decision: Decidir si la estrategia es ganar nuevos usuarios (mercado sin madurar) o retener y mejorar planes (mercado maduro).
+  balance: 'Se equilibra con «clientes que vuelven»: crecer en líneas sirve poco si se pierden al mismo ritmo.'
+  related: [retention_rate]
+  chart:
+    type: line
+    why: Una línea por grupo muestra en qué año cada mercado llegó a la madurez.
+  sql: SELECT SUM(lines) * 100.0 / SUM(population) FROM moviles_anual
+- id: pupil_teacher_ratio
+  name: Alumnos por docente
+  case: educacion
+  tema: personas
+  rubros: [educacion]
+  question: ¿Cuántos alumnos tiene a cargo cada docente?
+  meaning: Cantidad de alumnos por cada docente en un nivel educativo.
+  definition: Mediana de la relación alumnos por docente de los registros (país, nivel y año) del periodo.
+  calculation: Se ordenan los registros por su relación alumnos por docente y se toma el del medio.
+  formula: median(student_ratio)
+  unit: ratio
+  granularity: Una fila por país, nivel educativo y año; se revisa cada año.
+  direction: lower_is_better
+  target: 20
+  thresholds:
+    green: 20
+    amber: 25
+  target_why: Veinte alumnos por docente es una referencia ilustrativa; con más de 25 la atención individual se vuelve difícil.
+  owner: Dirección académica
+  source: UNESCO, Instituto de Estadística, vía TidyTuesday
+  input:
+    table: docentes
+    columns: [student_ratio]
+  how_to_read: Compare cada nivel por separado. Un número bajo no siempre es mejor; puede indicar colegios con muy pocos alumnos y alto costo por alumno.
+  misreadings:
+  - 'Leer menos alumnos por docente como mejor sin límite.'
+  - 'Mezclar primaria y secundaria en un solo número.'
+  decision: Decidir dónde asignar las nuevas plazas docentes.
+  balance: 'Se equilibra con el costo por alumno: bajar la relación cuesta presupuesto que podría ir a otros insumos.'
+  related: [sla_compliance]
+  chart:
+    type: bar
+    why: Barras por grupo ordenadas contra la meta muestran dónde falta personal.
+- id: on_time_share
+  name: Viajes a tiempo
+  case: logistica
+  tema: operaciones
+  rubros: [logistica]
+  question: ¿Qué parte de los viajes sale dentro de la tolerancia prometida?
+  meaning: Porcentaje de los viajes con un atraso de 15 minutos o menos.
+  definition: Viajes con atraso menor o igual a la tolerancia dividido entre todos los viajes del periodo.
+  calculation: Se cuentan los viajes con 15 minutos de atraso o menos (los adelantados cuentan como a tiempo) y se dividen entre todos los viajes.
+  formula: count(delay_minutes <= ${tolerance_minutes}) / count(*)
+  unit: percent
+  granularity: Una fila por viaje; se revisa cada semana por franja horaria.
+  direction: higher_is_better
+  target: 0.8
+  thresholds:
+    green: 0.8
+    amber: 0.7
+  target_why: Ocho de cada diez viajes a tiempo es una referencia ilustrativa de transporte programado; la tolerancia de 15 minutos es la usada en las estadísticas de puntualidad aérea de Estados Unidos.
+  owner: Jefe de operaciones de transporte
+  source: Oficina de Estadísticas de Transporte de Estados Unidos, vía vega-datasets
+  params:
+    tolerance_minutes: 15
+  input:
+    table: vuelos
+    columns: [delay_minutes]
+  how_to_read: Mírelo por hora del día. Los atrasos se acumulan durante la jornada, así que el promedio diario esconde las horas críticas.
+  misreadings:
+  - 'Usar el promedio de minutos de atraso: unos pocos viajes muy atrasados lo disparan.'
+  - 'Contar solo los viajes atrasados y no la cantidad total de viajes.'
+  decision: Reforzar la programación (holguras, equipos de reserva) en las franjas donde se acumulan los atrasos.
+  balance: 'Se equilibra con la disponibilidad de la flota: agregar holgura reduce atrasos, pero deja equipos ociosos.'
+  related: [otif, availability]
+  chart:
+    type: bar
+    why: Barras por franja horaria muestran dónde se acumulan los atrasos.
+  sql: SELECT AVG(CASE WHEN delay_minutes <= ${tolerance_minutes} THEN 1.0 ELSE 0.0 END) FROM vuelos
+- id: loan_growth
+  name: Crecimiento de la cartera
+  case: banca
+  tema: costos
+  rubros: [banca]
+  question: ¿La cartera de créditos sigue creciendo mientras se controla la morosidad?
+  meaning: Cuánto creció el saldo total de créditos en los últimos 12 meses.
+  definition: Saldo de créditos del último mes dividido entre el saldo de 12 meses antes, menos uno.
+  calculation: Se suma el saldo de todos los créditos del último mes y se divide entre la suma del saldo de 12 meses antes; al resultado se le resta 1.
+  formula: sum(loan_balance at last month) / sum(loan_balance 12 months before) - 1
+  unit: percent
+  granularity: Una fila por mes, tipo de entidad, segmento y región; se revisa cada mes.
+  direction: higher_is_better
+  target: 0.06
+  thresholds:
+    green: 0.06
+    amber: 0.03
+  target_why: Seis por ciento al año es una referencia ilustrativa de crecimiento sano, cerca del crecimiento de la economía más la inflación.
+  owner: Gerente comercial de créditos
+  source: Cartera de créditos (simulada)
+  input:
+    table: creditos
+    columns: [month, loan_balance]
+  how_to_read: Léalo junto a la morosidad. Crecer rápido con morosidad en alza suele significar que se prestó a quien no debía.
+  misreadings:
+  - 'Celebrar el crecimiento sin mirar la morosidad de los créditos nuevos.'
+  - 'Comparar el saldo de meses distintos sin quitar los créditos castigados.'
+  decision: Dosificar la meta comercial en el segmento cuya morosidad se aleja de la meta.
+  balance: 'Equilibra a la morosidad: una admisión demasiado estricta baja la morosidad y también el negocio.'
+  related: [npl_ratio]
+  chart:
+    type: line
+    why: La tendencia junto a la morosidad muestra si el crecimiento se paga con riesgo.
+- id: lines_growth
+  name: Crecimiento de las líneas móviles
+  case: telecom
+  tema: cliente
+  rubros: [telecom]
+  question: ¿El mercado de telefonía móvil sigue sumando líneas o ya se estancó?
+  meaning: Cuánto creció la cantidad de líneas móviles en el último año.
+  definition: Líneas del último año dividido entre las líneas del año anterior, menos uno, sumando los países del grupo.
+  calculation: Se suman las líneas del último año, se dividen entre la suma de las líneas del año anterior y se resta 1.
+  formula: sum(lines at last year) / sum(lines at previous year) - 1
+  unit: percent
+  granularity: Una fila por país y año; se revisa cada año.
+  direction: higher_is_better
+  target: 0.03
+  thresholds:
+    green: 0.03
+    amber: 0.0
+  target_why: Tres por ciento al año es una referencia ilustrativa de un mercado que todavía suma usuarios; cerca de cero, el mercado está maduro.
+  owner: Gerencia comercial
+  source: Unión Internacional de Telecomunicaciones, vía Our World in Data
+  input:
+    table: moviles_anual
+    columns: [year, lines]
+  how_to_read: Anticipa la madurez del mercado. Cuando se acerca a cero, crecer exige quitar clientes a otros, y la retención pasa a ser lo principal.
+  misreadings:
+  - 'Leer una caída del crecimiento como pérdida de clientes: puede ser que ya casi todos tengan línea.'
+  - 'Comparar años con cambios de cómo se cuentan las líneas (por ejemplo, líneas prepago inactivas).'
+  decision: Cambiar el foco de captar a retener cuando el crecimiento se acerca a cero.
+  balance: 'Se equilibra con la penetración: un crecimiento bajo con penetración baja es un problema; con penetración alta, es madurez.'
+  related: [mobile_penetration]
+  chart:
+    type: line
+    why: La tendencia anual muestra en qué año se frenó el mercado.

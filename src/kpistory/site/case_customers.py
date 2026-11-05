@@ -25,6 +25,7 @@ from .common import (
     tiles,
 )
 from .current import fecha, headline, trimestre
+from .plantilla import ficha
 
 SEGMENTS = [
     "Campeones",
@@ -55,8 +56,8 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     )
 
     md = [
-        "# Caso 4 · Clientes: ¿los estamos conservando y a quién llamamos primero?\n",
-        aviso_datos(manifest, ["transactions", "survey"]),
+        "# Clientes: ¿los estamos conservando y a quién llamamos primero?\n",
+        ficha("customers", manifest) + aviso_datos(manifest, ["transactions", "survey"]),
     ]
     md.append(en_30_segundos(
         f"De los clientes que compraron en un trimestre, {de_cada_100(H['retention_rate'].value, 'volvieron')} a comprar el "
@@ -67,17 +68,17 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         "nos calificaron mal en menos de 48 horas.",
     ))  # fmt: skip
     md.append(
-        "## El contexto\n\n"
+        "## Problema\n\n"
         f"La misma tienda del caso 3. **{n(cs['customer_id'].nunique())} clientes identificados** compraron entre "
         f"{fecha(sales['invoice_date'].min())} y {fecha(end)}. Las compras sin cliente identificado representan "
         f"{pct(anon_rev)} del ingreso y no entran aquí (se miden en el caso 5). Una encuesta de recomendación llegó a los "
         f"clientes del último año ({n(len(survey))} respuestas; la encuesta es simulada).\n\n"
     )
     md.append(
-        "## La pregunta del negocio\n\n"
+        "### La pregunta del negocio\n\n"
         + pregunta("¿Estamos conservando a nuestros clientes y a quién tenemos que llamar primero?")
     )
-    md.append("## Los indicadores\n\n")
+    md.append("## Indicadores\n\n")
     md.append(
         tiles(e, H, ["retention_rate", "repeat_purchase_rate", "revenue_at_risk_share", "nps"])
     )
@@ -91,7 +92,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
             e, H, ["revenue_at_risk_share", "retention_rate", "repeat_purchase_rate", "nps"]
         )
     )
-    md.append("## Lo que encontramos\n\n")
+    md.append("## Análisis\n\n")
     rs = pd.DataFrame({"q": list(ret.index), "v": ret.values})
     lo, hi = rs.loc[rs["v"].idxmin()], rs.loc[rs["v"].idxmax()]
     fig = charts.kpi_trend(
@@ -206,7 +207,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         f"clientes que compraban mucho: {len(risk)} clientes «en riesgo» explican {pct(H['revenue_at_risk_share'].value)} del "
         f"ingreso. Llamar a los {half} primeros recupera la mitad de esa oportunidad.\n\n"
     )
-    md.append("## Qué decidimos\n\n")
+    md.append("## Solución\n\n")
     dec_rows = [
         (f"Campaña de recuperación con la lista de clientes «en riesgo» ordenada por ingreso: los primeros {half} explican la mitad. Llamada de un ejecutivo, no un correo masivo.", "Responsable de relación con clientes", fecha(end + pd.Timedelta(days=30))),
         ("Llamar a los clientes que nos calificaron de 0 a 6 en menos de 48 horas y registrar el motivo.", "Responsable de experiencia del cliente", fecha(end + pd.Timedelta(days=14))),
@@ -217,7 +218,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     v = get_valores(t, e, manifest)["customers"]
     md.append(seccion_valor(e, v))
     md.append(seccion_decision(e, v, dec_rows[0][0]))
-    md.append("## Cómo lo seguimos midiendo\n\n")
+    md.append("### Cómo lo seguimos midiendo\n\n")
     md.append(seguimiento(e, [
         ("revenue_at_risk_share", "Cada mes, con la lista de clientes (avisa antes)", "Más de 20 %: ampliar la campaña"),
         ("retention_rate", "Cada trimestre, por año de primera compra", "Menos de 40 %"),

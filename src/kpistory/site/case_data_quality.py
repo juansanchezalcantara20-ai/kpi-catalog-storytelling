@@ -25,6 +25,7 @@ from .common import (
     tiles,
 )
 from .current import fecha, headline
+from .plantilla import ficha
 
 DIMS = ["completeness", "uniqueness", "validity", "timeliness"]
 DIM_ES = {
@@ -47,8 +48,8 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     wlabel = rules["transactions"]["labels"].get(weakest["column"], weakest["column"])
     anon_rev = 1 - t["customer_sales"]["revenue"].sum() / t["sales"]["revenue"].sum()
 
-    md = ["# Caso 5 · Calidad de los datos: ¿podemos confiar en los números de los otros casos?\n",
-          aviso_datos(manifest, ["tickets", "work_orders", "process_data", "transactions", "survey"])]  # fmt: skip
+    md = ["# Calidad de los datos: ¿podemos confiar en los números de los otros casos?\n",
+          ficha("data_quality", manifest) + aviso_datos(manifest, ["tickets", "work_orders", "process_data", "transactions", "survey"])]  # fmt: skip
     md.append(en_30_segundos(
         f"{len(below)} de {len(measured)} controles de calidad están bajo su meta. El más débil: "
         f"{DIM_ES[worst['dimension']].lower()} en «{worst['label']}» ({pct(worst['value'], 1)}).",
@@ -58,7 +59,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         "cuadrícula de calidad con un responsable por cada casilla en rojo.",
     ))  # fmt: skip
     md.append(
-        "## El contexto\n\n"
+        "## Problema\n\n"
         "Los casos 1 a 4 calcularon 24 indicadores sobre cinco conjuntos de datos. Cada uno supone, sin decirlo, que los "
         "datos están completos, sin duplicados, son válidos y llegaron a tiempo. Este caso mide esos supuestos con la misma "
         "disciplina que cualquier otro indicador: definición, meta, responsable y un archivo de reglas por conjunto de datos, "
@@ -66,12 +67,12 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         "datos: cada regla tiene un dueño que la corrige en el origen.\n\n"
     )
     md.append(
-        "## La pregunta del negocio\n\n"
+        "### La pregunta del negocio\n\n"
         + pregunta(
             "¿Podemos confiar en los datos de los casos 1 a 4, y qué defecto cambia un número de negocio?"
         )
     )
-    md.append("## Los indicadores\n\n")
+    md.append("## Indicadores\n\n")
     md.append(tiles(e, H, [f"dq_{d}" for d in DIMS]))
     md.append(
         "Estos valores juntan todos los conjuntos de datos, ponderados por número de filas (las ventas pesan mucho). La cuadrícula de abajo, por conjunto de datos, es la vista que importa.\n\n"
@@ -80,7 +81,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     md.append(
         bloque_bala(e, H, ["dq_completeness", "dq_uniqueness", "dq_validity", "dq_timeliness"])
     )
-    md.append("## Lo que encontramos\n\n")
+    md.append("## Análisis\n\n")
     order = [rules[k]["label"] for k in rules]
     matrix = dq.pivot(index="label", columns="dimension", values="value")[DIMS].reindex(order)
     status = dq.pivot(index="label", columns="dimension", values="status")[DIMS].reindex(order)
@@ -155,7 +156,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
             f"**No se puede medir:** {', '.join(no_med)} no registran la hora de carga, así que su oportunidad no se puede "
             "calcular. La cuadrícula lo dice en vez de mostrar un 100 % inventado: que falte esa columna ya es un hallazgo.\n\n"
         )
-    md.append("## Qué decidimos\n\n")
+    md.append("## Solución\n\n")
     hoy = pd.Timestamp(manifest["generated_at"][:10])
     rows = [
         (
@@ -193,7 +194,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     v = get_valores(t, e, manifest)["data_quality"]
     md.append(seccion_valor(e, v))
     md.append(seccion_decision(e, v, rows[0][0]))
-    md.append("## Cómo lo seguimos midiendo\n\n")
+    md.append("### Cómo lo seguimos midiendo\n\n")
     md.append(seguimiento(e, [
         ("dq_completeness", "En cada carga, por campo obligatorio", "Un campo obligatorio bajo 95 %"),
         ("dq_uniqueness", "En cada carga", "Cualquier clave repetida"),

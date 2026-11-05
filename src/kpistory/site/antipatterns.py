@@ -192,7 +192,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine) -> str:
         f"**Por qué engaña la izquierda.** Comparamos mal ángulos y áreas: con {len(counts)} porciones, el orden de las del medio "
         "es adivinanza y las pequeñas desaparecen. **Qué hace la derecha:** barras ordenadas sobre la misma base muestran el "
         "orden y las diferencias exactas. Una torta solo sirve para dos o tres partes de un total (la barra de recomendación "
-        "del caso 4 es el único gráfico de partes de un total del sitio).\n"
+        "del caso de clientes es el único gráfico de partes de un total del sitio).\n"
     )
 
     # 5 ------------------------------------------------------------ semáforo sin meta
@@ -273,7 +273,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine) -> str:
         "**Por qué engaña la izquierda.** Las dos escalas son independientes: dónde se cruza la línea con las barras depende de "
         "cómo se eligieron los rangos, así que inventa una relación (o la esconde). Además, el total mezcla el equipo que "
         "cambió con los que no. **Qué hace la derecha:** un solo eje, las dos series en la misma base y la comparación que "
-        "explica la caída del caso 1. El cumplimiento va en su propio gráfico al lado.\n"
+        "explica la caída del caso de atención de solicitudes. El cumplimiento va en su propio gráfico al lado.\n"
     )
     md.append(
         "---\n\nLas reglas detrás de las versiones honestas están en [Cómo leer este sitio](como-leer.md).\n"

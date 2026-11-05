@@ -26,7 +26,11 @@ def _total_card(vals) -> str:
     )
 
 
-def resumen_page(vals, manifest: dict) -> str:
+def resumen_page(vals, manifest: dict, engine=None, values=None) -> str:
+    from ..engine import Engine
+    from .ejes import resumen_por_rubro
+
+    engine = engine or Engine()
     md = ["# Resumen para gerencia\n"]
     md.append(
         "Lo que una gerencia necesita en un minuto: cuánto vale cerrar las brechas de los indicadores, dónde está el dinero "
@@ -43,7 +47,9 @@ def resumen_page(vals, manifest: dict) -> str:
             f"- **Responsable:** {v.responsable} · **Fecha de revisión:** {v.fecha}\n"
             f"- [Ver el caso completo](cases/{SLUG[v.caso]}.md)\n"
         )
-    md.append("## Todas las áreas\n")
+    if values is not None:
+        md.append(resumen_por_rubro(engine, values, vals))
+    md.append("## Todas las áreas con valor en soles\n")
     md.append("| Área | Brecha | Al mes | Al año | Horas al mes |")
     md.append("|---|---|---|---|---|")
     for v in sorted(vals.values(), key=lambda x: -x.soles_anio):
@@ -63,35 +69,51 @@ def resumen_page(vals, manifest: dict) -> str:
     return "\n".join(md)
 
 
-def home_page(vals, manifest: dict) -> str:
+def home_page(vals, manifest: dict, engine=None, values=None) -> str:
+    from ..catalog import rubros_config
+    from ..engine import Engine
+    from .ejes import ETIQUETA, contador, destacados, matriz
+    from .plantilla import con_datos_reales, tipo_resultado
+
+    engine = engine or Engine()
+    cfg = rubros_config()
     t = total_anio(vals)
-    real = manifest["tickets"]["origin"] == "real"
     md = [
         "# Indicadores que se entienden\n",
-        "**Un indicador no depende de la herramienta.** Cada indicador de este sitio se define una sola vez, se calcula una "
-        "sola vez y se presenta de dos formas: como una **historia** que explica qué pasó y qué decidir, y como un **tablero** "
-        "para revisarlo cada semana.\n",
+        "**Un indicador bien definido convierte un dato en una decisión con responsable, fecha y valor en soles.** Cada indicador "
+        "de este sitio se define una sola vez, se calcula una sola vez y se presenta de dos formas: como una **historia** "
+        "(problema → solución → resultado) y como un **tablero** para revisarlo cada semana.\n",
+        contador(engine, manifest),
         _total_card(vals),
         "## Para qué sirve esto\n",
         '<div class="grid cards" markdown>\n',
         "- **Un número, una verdad.** El tablero y el sitio no pueden contradecirse: los dos leen el mismo cálculo y una prueba "
         "automática falla si una cifra no coincide entre el caso, el catálogo, el tablero y este resumen.",
-        "- **Del dato a la decisión.** Cada caso termina en una acción con responsable y fecha, y muestra qué se esperaba y cuánto "
-        "valió con un escenario antes y después.",
-        f"- **El valor en soles.** Cada brecha se traduce a soles y horas: hoy hay {money(t)} al año en juego repartidos en "
-        f"{len(vals)} áreas, con supuestos que usted puede cambiar.",
+        "- **Del dato a la decisión.** Cada caso sigue la misma estructura: problema, indicadores, análisis, solución y resultado, "
+        "y el resultado dice si fue observado en datos reales o estimado con un escenario.",
+        f"- **El valor en soles.** Donde hay supuestos de valor, cada brecha se traduce a soles y horas: hoy hay {money(t)} al año en "
+        "juego, con supuestos que usted puede cambiar.",
         "\n</div>\n",
         "[Resumen para gerencia](resumen.md){ .md-button .md-button--primary } [Abrir el tablero](dashboard/index.html){ .md-button }\n",
-        "## Qué hay adentro\n",
-        "- **[Cinco casos](cases/service.md):** atención de solicitudes, mantenimiento, inventario, clientes y calidad de los datos.",
-        "- **[Errores comunes al medir](antipatterns.md):** el mismo dato mostrado de una forma que engaña y de una forma honesta.",
+        f"## {len(cfg['rubros'])} rubros × {len(cfg['temas'])} temas\n",
+        "Cada fila es un rubro (sector) y cada columna un tema. Un clic en una celda abre el caso o el tablero filtrado.\n",
+        matriz(engine, manifest),
+        "## Tres casos para empezar\n",
+    ]
+    for c in destacados(engine, manifest):
+        d = engine.catalog.cases[c]
+        rub = ", ".join(cfg["rubros"][r]["nombre"] for r in d["rubros"])
+        datos = (
+            "datos reales" if con_datos_reales(c, manifest) else "datos simulados o de referencia"
+        )
+        md.append(
+            f"- **[{d['title']}](cases/{c}.md)** · {rub} · {ETIQUETA[tipo_resultado(c, manifest)]} · {datos}"
+        )
+    md += [
+        "\n## Qué más hay adentro\n",
+        "- **[Por rubro](rubros/index.md)** y **[por tema](temas/index.md):** los indicadores que mira cada sector y cada tipo de problema.",
         "- **[Catálogo de indicadores](catalog/index.md):** qué mide cada indicador, cómo se calcula, un ejemplo con números y qué decisión ayuda a tomar.",
-        "- **[Cómo leer este sitio](como-leer.md):** qué es un indicador, qué es una meta y un glosario. Pase el mouse sobre las siglas subrayadas para ver su significado.\n",
-        "## De dónde salen los datos\n",
-        ("El caso de atención de solicitudes usa **solicitudes ciudadanas reales de Nueva York** (servicio 311). " if real else
-         "El caso de atención de solicitudes usa datos simulados en esta versión porque la descarga pública no estuvo disponible. ")
-        + "Los casos de mantenimiento, inventario y clientes usan datos públicos del repositorio UCI combinados con simulaciones "
-        "para lo que esas fuentes no registran. Cada página dice qué parte es real y qué parte es simulada; el detalle está en "
-        "[Fuentes de datos](data-sources.md).\n",
-    ]  # fmt: skip
+        "- **[Cómo leer este sitio](como-leer.md):** qué es un indicador, qué es una meta, los errores comunes al medir y un glosario.",
+        "- **[Fuentes](data-sources.md):** de dónde sale cada dato, con su licencia, fecha de descarga y filas.\n",
+    ]
     return "\n".join(md)

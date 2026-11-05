@@ -6,51 +6,96 @@ from ..data.solicitudes311 import config
 from .common import detalle_tecnico
 from .current import fecha
 
-CASOS = {
-    "tickets": "Caso 1 · Atención de solicitudes",
-    "process_data": "Caso 2 · Mantenimiento",
-    "work_orders": "Caso 2 · Mantenimiento",
-    "transactions": "Casos 3 y 4 · Inventario y clientes",
-    "inventory": "Caso 3 · Inventario",
-    "survey": "Caso 4 · Clientes",
+TIPO = {
+    "real": "Pública real",
+    "referencia": "Pública de referencia (sintética según su publicador)",
+    "simulado": "Simulada",
 }
 
 
+def _origen(manifest: dict, key: str) -> tuple[str, str, str]:
+    """(origen en esta versión, fecha de descarga, filas) for a config/fuentes.yaml key."""
+    from .plantilla import MANIFEST_KEY
+
+    m = manifest.get(MANIFEST_KEY.get(key, key), {})
+    tables = manifest.get("tables", {})
+    rows = m.get("rows") or {"mantenimiento": tables.get("landing_process_data"), "ventas": tables.get("landing_transactions"),
+                             "creditos": tables.get("creditos")}.get(key)  # fmt: skip
+    if m.get("origin") == "real":
+        return (
+            "🟢 Descargada",
+            fecha(m["downloaded_at"]),
+            f"{rows:,}".replace(",", " ") if rows else "–",
+        )
+    detalle = (
+        "Simulada a propósito"
+        if key == "creditos"
+        else (
+            "Plan B: la descarga falló"
+            if "falló" in m.get("note", "")
+            else "Plan B: datos simulados"
+        )
+    )
+    return detalle, "–", f"{rows:,}".replace(",", " ") if rows else "–"
+
+
 def page(manifest: dict) -> str:
+    from ..catalog import load, rubros_config
+    from ..data.sectores import fuentes
+
+    cfg_r = rubros_config()["rubros"]
+    cat = load()
+    fs = fuentes()
     md = [
         "# Fuentes de datos\n",
-        "Esta página se genera en cada actualización. Las fuentes públicas se descargan en GitHub Actions; si una descarga "
-        "falla, el sitio vuelve a los datos simulados de esa fuente y lo dice en la página del caso. Nunca se mezclan "
-        "datos reales y simulados sin avisarlo.\n",
-        "| Datos | Se usan en | Origen en esta versión | Detalle |",
-        "|---|---|---|---|",
+        "Esta página se genera en cada actualización desde el archivo de configuración de fuentes y el registro de la última descarga. Las fuentes "
+        "públicas se descargan en GitHub Actions, sin cuenta ni clave; si una descarga falla, ese caso vuelve a datos simulados con "
+        "semilla fija y lo dice en su página. Nunca se mezclan datos reales y simulados sin avisarlo.\n",
+        "| Fuente | Publicador | Licencia | Rubros | Tipo | En esta versión | Descargada | Filas | Filtros |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
-    for key in ("tickets", "process_data", "work_orders", "transactions", "inventory", "survey"):
-        m = manifest[key]
-        real = m["origin"] == "real"
-        origen = (
-            f"🟢 Datos reales, descargados el {fecha(m['downloaded_at'])}"
-            if real
-            else "Datos simulados"
+    for key, f in fs.items():
+        if key == "descartadas" or not isinstance(f, dict) or "tipo" not in f:
+            continue
+        origen, cuando, filas = _origen(manifest, key)
+        name = f"[{f['nombre']}]({f['pagina']})" if f.get("pagina") else f["nombre"]
+        rub = ", ".join(f"[{cfg_r[r]['nombre']}](rubros/{r}.md)" for r in f["rubros"])
+        filtros = f.get("filtros") or (
+            f"Departamento de Transporte, últimos {f['periodo']['meses']} meses completos"
+            if key == "solicitudes"
+            else "–"
         )
-        name = f"[{m['name']}]({m['url']})" if m.get("url") else m["name"]
-        detalle = (
-            (f"{m['rows']} filas" if real and m.get("rows") else "descarga correcta")
-            if real
-            else (
-                "la descarga falló; se usa el plan B"
-                if "falló" in m["note"]
-                else "simulación con reglas explícitas"
-            )
+        md.append(
+            f"| {name} | {f['publicador']} | {f['licencia']} | {rub} | {TIPO[f['tipo']]} | {origen} | {cuando} | {filas} | {filtros} |"
         )
-        md.append(f"| {name} | {CASOS[key]} | {origen} | {detalle} |")
     md.append(
-        "\nLos datos simulados muestran el método; no describen una empresa real. Cada generador usa una semilla fija, así que siempre produce los mismos números.\n"
+        "\nLos datos simulados muestran el método; no describen una empresa real. Cada generador usa una semilla fija, así que siempre "
+        "produce los mismos números. Las comparaciones son entre grupos (países, regiones, niveles, tipos de entidad), nunca entre empresas.\n"
     )
+    md.append("## Rubro por rubro\n")
+    md.append("| Rubro | Casos | Fuente principal |")
+    md.append("|---|---|---|")
+    for rid, r in cfg_r.items():
+        casos = cat.cases_for_rubro(rid)
+        keys = sorted({k for c in casos for k in cat.cases[c]["fuentes"]}, key=list(fs).index)
+        src = "; ".join(f"{fs[k]['nombre']} ({TIPO[fs[k]['tipo']].lower()})" for k in keys)
+        md.append(
+            f"| [{r['nombre']}](rubros/{rid}.md) | "
+            + ", ".join(f"[{cat.cases[c]['title']}](cases/{c}.md)" for c in casos)
+            + f" | {src} |"
+        )
+    md.append("\n## Fuentes que se evaluaron y no se usaron\n")
+    md.append("| Fuente | Rubros | Por qué no |")
+    md.append("|---|---|---|")
+    for d in fs.get("descartadas", []):
+        md.append(
+            f"| {d['fuente']} | {', '.join(cfg_r[r]['nombre'] for r in d['rubros'])} | {d['motivo']} |"
+        )
+    md.append("")
 
     cfg = config()
     t = manifest["tickets"]
-    md.append("## Caso 1 · Solicitudes ciudadanas de Nueva York (servicio 311)\n")
+    md.append("## Atención de solicitudes · Nueva York (servicio 311)\n")
     md.append(
         f"**Fuente:** [{cfg['nombre']}]({cfg['pagina']}), publicada por {cfg['publicador']}. Se descarga por su interfaz "
         "pública, sin cuenta ni clave. **Filtro:** solo el Departamento de Transporte y los últimos "
@@ -85,21 +130,34 @@ def page(manifest: dict) -> str:
         "como «Sin dato» cuando el caso usa datos reales. Las solicitudes cerradas después de la fecha de corte se cuentan "
         "como abiertas a esa fecha.\n"
     )
-    md.append("## Casos 2 a 5\n")
+    md.append("## Notas sobre las demás fuentes\n")
     md.append(
-        "- **Mantenimiento:** datos de proceso de máquinas [AI4I 2020](https://archive.ics.uci.edu/dataset/601/ai4i+2020+predictive+maintenance+dataset) "
-        "(repositorio UCI, licencia CC BY 4.0). Las órdenes de trabajo son simuladas a partir de sus fallas.\n"
-        "- **Inventario y clientes:** ventas de [Online Retail II](https://archive.ics.uci.edu/dataset/502/online+retail+ii) "
-        "(repositorio UCI, CC BY 4.0). El inventario, el pronóstico, las entregas y la encuesta de recomendación son simulados: "
-        "no existe una fuente pública con esos datos para la misma tienda.\n"
-        "- **Calidad de los datos:** se mide sobre los datos de los casos 1 a 4 tal como llegan.\n"
-        "- No se usa ningún dato de empleadores, clientes ni personas reales.\n"
+        "- **Mantenimiento (AI4I 2020):** su publicador lo describe como un conjunto sintético que refleja datos reales de mantenimiento "
+        "predictivo; aquí se usa como referencia pública y se cuenta como dato simulado. Las órdenes de trabajo se simulan a partir de sus fallas.\n"
+        "- **Inventario y clientes (Online Retail II):** el inventario, el pronóstico, las entregas y la encuesta son simulados: no existe una fuente pública con esos datos para la misma tienda.\n"
+        "- **Telecomunicaciones:** la fuente no trae población de 2014 a 2017; se extiende con el crecimiento de los cinco años anteriores de cada país.\n"
+        "- **Logística:** la muestra de vuelos no tiene fecha ni aerolínea, así que no permite un antes y un después.\n"
+        "- **Calidad de los datos:** se mide sobre los datos de los otros casos tal como llegan.\n"
+        "- No se usa ningún dato de empleadores, clientes ni personas reales; solo se publican cifras agregadas.\n"
     )
     md.append(f"\nVersión generada el {fecha(manifest['generated_at'][:10])}.\n")
     tech = [f"- Modo de origen de esta versión: `{manifest['source_mode']}`."]
     tech += [
         f"- `{k}`: {manifest[k]['origin']} - {manifest[k]['note']}"
-        for k in ("tickets", "process_data", "work_orders", "transactions", "inventory", "survey")
+        for k in (
+            "tickets",
+            "process_data",
+            "work_orders",
+            "transactions",
+            "inventory",
+            "survey",
+            "energia",
+            "salud",
+            "moviles",
+            "docentes",
+            "vuelos",
+            "creditos",
+        )
     ]
     tech.append(
         "- Configuración de las fuentes: `config/fuentes.yaml`; registro de la última descarga: `data/processed/manifest.json`."

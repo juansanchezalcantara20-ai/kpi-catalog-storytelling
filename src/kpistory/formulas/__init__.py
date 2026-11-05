@@ -40,4 +40,4 @@ def median_or_nan(series: pd.Series) -> float:
 
 
 # Import modules so their @kpi decorators run.
-from . import customers, data_quality, inventory, maintenance, service  # noqa: E402,F401
+from . import customers, data_quality, inventory, maintenance, sectores, service  # noqa: E402,F401

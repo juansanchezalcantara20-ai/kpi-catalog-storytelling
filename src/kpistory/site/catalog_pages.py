@@ -29,14 +29,15 @@ UNIDAD = {
     "days": "días",
     "times_per_year": "veces al año",
     "score": "puntos (de −100 a +100)",
+    "g_per_kwh": "gramos de CO₂ por kilovatio hora",
+    "per_million": "por millón de habitantes",
+    "per_100": "por cada 100 habitantes",
+    "ratio": "alumnos por docente",
 }
-CASO = {
-    "service": ("Caso 1 · Atención de solicitudes", "service"),
-    "maintenance": ("Caso 2 · Mantenimiento", "maintenance"),
-    "inventory": ("Caso 3 · Inventario", "inventory"),
-    "customers": ("Caso 4 · Clientes", "customers"),
-    "data_quality": ("Caso 5 · Calidad de los datos", "data_quality"),
-}
+
+
+def CASO_DE(engine: Engine, case: str) -> tuple[str, str]:
+    return engine.catalog.cases[case]["title"], case
 
 
 def _hand_examples() -> dict:
@@ -65,13 +66,15 @@ def index_page(engine: Engine, values: dict[str, Headline]) -> str:
         "equilibra. Al final de cada ficha hay un detalle técnico desplegable con la fórmula y el código.\n",
         leyenda(),
     ]
-    for case in engine.catalog.cases:
-        title, slug = CASO[case]
-        md.append(f"\n## {title}\n")
-        md.append(f"[Ver el caso completo](../cases/{slug}.md)\n")
+    from ..catalog import rubros_config
+
+    temas = rubros_config()["temas"]
+    for tema, td in temas.items():
+        md.append(f"\n## {td['nombre']}\n")
+        md.append(f"[Ver el tema](../temas/{tema}.md)\n")
         md.append("| Indicador | Qué responde | Mejor si | Meta | Responsable | Valor actual |")
         md.append("|---|---|---|---|---|---|")
-        for k in engine.catalog.for_case(case):
+        for k in engine.catalog.for_tema(tema):
             md.append(
                 f"| [{k.name}]({k.id}.md) | {k.question} | {MEJOR[k.direction]} | "
                 f"{format_threshold(k, with_alert=False)} | {k.owner} | {_value(engine, k, values.get(k.id))} |"
@@ -83,16 +86,30 @@ def index_page(engine: Engine, values: dict[str, Headline]) -> str:
 
 
 def kpi_page(engine: Engine, k: KPI, h: Headline | None, examples: dict) -> str:
-    title, slug = CASO[k.case]
+    from ..catalog import rubros_config
+
+    cfg = rubros_config()
+    title, slug = CASO_DE(engine, k.case)
     md = [f"# {k.name}\n", f'<p class="story-question">{k.question}</p>\n', leyenda()]
+    md.append(
+        "**Tema:** "
+        + f"[{cfg['temas'][k.tema]['nombre']}](../temas/{k.tema}.md)"
+        + " · **Rubros:** "
+        + ", ".join(f"[{cfg['rubros'][r]['nombre']}](../rubros/{r}.md)" for r in k.rubros)
+        + "\n"
+    )
     md.append(
         f"**Valor actual:** {_value(engine, k, h)}"
         + (f" · {h.period}" if h and not h.note else "")
-        + f". [Ver el caso]({'../cases/' + slug + '.md'}).\n"
+        + f". [Ver el caso «{title}»]({'../cases/' + slug + '.md'}).\n"
     )
     md.append(
         f"**Meta:** {format_threshold(k)}. {MEJOR[k.direction]}. **Responsable:** {k.owner}.\n"
     )
+    if k.metas_por_rubro:
+        sign = {"higher_is_better": "≥", "lower_is_better": "≤"}.get(k.direction, "")
+        md.append("**Metas por rubro:** " + "; ".join(
+            f"{cfg['rubros'][r]['nombre']} {sign} {format_value(k, m['target'])} ({m['why']})" for r, m in k.metas_por_rubro.items()) + "\n")  # fmt: skip
     md.append(f"## Qué es\n\n{k.meaning}\n")
     md.append(f"## Cómo se calcula\n\n{k.calculation}\n")
     ex = examples.get(k.id)
@@ -107,7 +124,7 @@ def kpi_page(engine: Engine, k: KPI, h: Headline | None, examples: dict) -> str:
     md.append(f"## Cómo mostrarlo\n\n{k.chart['why']}\n")
 
     tech = [
-        f"- Identificador: `{k.id}`. Unidad: {UNIDAD[k.unit]}. Detalle: {k.granularity}",
+        f"- Identificador: `{k.id}` (tema `{k.tema}`, rubros {', '.join(f'`{r}`' for r in k.rubros)}). Unidad: {UNIDAD[k.unit]}. Detalle: {k.granularity}",
         f"- Definición formal: {k.definition}",
         f"- Fórmula: `{k.formula}`",
         f"- Tabla `{k.input['table']}`; columnas: "

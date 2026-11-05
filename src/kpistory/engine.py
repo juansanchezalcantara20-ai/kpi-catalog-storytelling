@@ -72,7 +72,10 @@ def grade(k: KPI, value: float) -> str:
     return "green" if in_green else "amber" if in_amber else "red"
 
 
-UNIT_SUFFIX = {"hours": " h", "days": " días", "times_per_year": " veces al año", "score": ""}
+UNIT_SUFFIX = {
+    "hours": " h", "days": " días", "times_per_year": " veces al año", "score": "",
+    "g_per_kwh": " g por kWh", "per_million": " por millón", "per_100": " por cada 100", "ratio": " alumnos por docente",
+}  # fmt: skip
 
 
 def number(value: float, decimals: int = 0) -> str:

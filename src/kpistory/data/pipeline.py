@@ -19,13 +19,14 @@ from datetime import UTC, datetime
 import pandas as pd
 
 from ..paths import PROCESSED_DIR
-from . import customers, inventory, maintenance, quality, retail, solicitudes311, tickets
+from . import customers, inventory, maintenance, quality, retail, sectores, solicitudes311, tickets
 
 SOURCES = {
     "process_data": {
         "name": "AI4I 2020 (datos de proceso de máquinas)",
         "publisher": "UCI Machine Learning Repository (Matzka, 2020), CC BY 4.0",
-        "url": maintenance.URL,
+        "url": "https://archive.ics.uci.edu/dataset/601/ai4i+2020+predictive+maintenance+dataset",
+        "tipo": "referencia",
     },
     "transactions": {
         "name": "Online Retail II (ventas de una tienda en línea)",
@@ -56,6 +57,54 @@ def _acquire(
     else:
         info.update(origin="synthetic", note="plan B - se pidieron datos simulados")
     return synthetic(), info
+
+
+SECTOR_SOURCES = [
+    ("energia", "energia_anual", sectores.energia_real, sectores.energia_sintetica),
+    ("salud", "salud_semanal", sectores.salud_real, sectores.salud_sintetica),
+    ("moviles", "moviles_anual", sectores.moviles_real, sectores.moviles_sintetica),
+    ("docentes", "docentes", sectores.docentes_real, sectores.docentes_sintetica),
+    ("vuelos", "vuelos", sectores.vuelos_real, sectores.vuelos_sintetica),
+]
+SECTOR_NAMES = {
+    "energia": "energia",
+    "salud": "mortalidad",
+    "moviles": "moviles",
+    "docentes": "docentes",
+    "vuelos": "vuelos",
+}
+
+
+def _sector(
+    key: str, real: Callable, synthetic: Callable, source: str
+) -> tuple[pd.DataFrame, dict]:
+    cfg = sectores.fuentes()[SECTOR_NAMES[key]]
+    info = {"name": cfg["nombre"], "publisher": cfg["publicador"], "url": cfg["pagina"]}
+    if key == "salud":  # two files of the same publisher
+        info.update(name="COVID-19: vacunación y muertes confirmadas por semana (Our World in Data)",
+                    url="https://github.com/owid/covid-19-data")  # fmt: skip
+    if source in ("auto", "real"):
+        try:
+            t0 = time.time()
+            df, extra = real()
+            info.update(origin="real", rows=extra["rows"], filter=extra["filter"],
+                        note=f"{extra['rows']} filas en {time.time() - t0:.0f} s; {extra['filter']}",
+                        downloaded_at=datetime.now(UTC).strftime("%Y-%m-%d"))  # fmt: skip
+            return df, info
+        except Exception as exc:
+            if source == "real":
+                raise
+            reason = f"plan B - la descarga falló: {type(exc).__name__}: {str(exc)[:160]}"
+    else:
+        reason = "plan B - se pidieron datos simulados"
+    df = synthetic()
+    info.update(
+        name=cfg["nombre"] + " (simulados)",
+        origin="synthetic",
+        rows=len(df),
+        note=f"{reason}; semilla fija",
+    )
+    return df, info
 
 
 UNAVAILABLE_IN_311 = ["first_response_time", "first_contact_resolution", "reopen_rate"]
@@ -140,6 +189,13 @@ def build(source: str = "auto") -> tuple[dict[str, pd.DataFrame], dict]:
 
     # Case 5 - data quality on the landing data
     tables.update(quality.measure(landing))
+
+    # Sector cases: public data compared by group, each with its own plan B
+    for key, table, real, synthetic in SECTOR_SOURCES:
+        tables[table], manifest[key] = _sector(key, real, synthetic, source)
+    tables["creditos"] = sectores.creditos_sintetica()
+    manifest["creditos"] = {"name": sectores.fuentes()["creditos"]["nombre"], "origin": "synthetic",
+                            "note": "simulación de una cartera de créditos, semilla 2031 (no hay fuente pública estable sin registro)"}  # fmt: skip
     return {**tables, **{f"landing_{k}": v for k, v in landing.items()}}, manifest
 
 
@@ -178,7 +234,16 @@ def run(source: str = "auto") -> dict:
         df.to_parquet(PROCESSED_DIR / f"{name}.parquet", index=False)
     manifest["tables"] = {name: len(df) for name, df in tables.items()}
     (PROCESSED_DIR / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    for key in ("tickets", "process_data", "work_orders", "transactions", "inventory", "survey"):
+    for key in (
+        "tickets",
+        "process_data",
+        "work_orders",
+        "transactions",
+        "inventory",
+        "survey",
+        *SECTOR_NAMES,
+        "creditos",
+    ):
         print(f"  {key:<14} {manifest[key]['origin']:<9} {manifest[key]['note']}")
     print(f"Data ready in {time.time() - t0:.0f}s -> {PROCESSED_DIR}")
     return manifest

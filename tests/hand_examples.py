@@ -331,6 +331,107 @@ EXAMPLES: list[HandExample] = [
         "Plazo de 24 horas. Cuatro registros llegaron 1 h, 24 h (justo a tiempo), 24 h y 1 minuto, y 88 h después. 2 de 4 = 50 %.",
         overrides={"event_col": "event_at", "loaded_col": "loaded_at", "max_delay_hours": 24},
     ),
+    # ---------------------------------------------------------------- rubros
+    HandExample(
+        "npl_ratio",
+        pd.DataFrame(
+            {"loan_balance": [1000.0, 3000.0, 1000.0], "overdue_balance": [20.0, 90.0, 90.0]}
+        ),
+        0.04,
+        "Se prestaron 1 000 + 3 000 + 1 000 = 5 000 soles y están atrasados 20 + 90 + 90 = 200. 200 / 5 000 = 4.0 %.",
+    ),
+    HandExample(
+        "renewable_share_elec",
+        pd.DataFrame(
+            {
+                "renewables_twh": [30.0, 10.0],
+                "fossil_twh": [20.0, 40.0],
+                "generation_twh": [50.0, 50.0],
+            }
+        ),
+        0.4,
+        "Dos países generaron 50 TWh cada uno; 30 y 10 TWh fueron renovables. (30 + 10) / (50 + 50) = 40 %.",
+    ),
+    HandExample(
+        "fossil_share_elec",
+        pd.DataFrame(
+            {
+                "renewables_twh": [30.0, 10.0],
+                "fossil_twh": [20.0, 40.0],
+                "generation_twh": [50.0, 50.0],
+            }
+        ),
+        0.6,
+        "Mismos dos países: 20 y 40 TWh fósiles. (20 + 40) / 100 = 60 %.",
+    ),
+    HandExample(
+        "carbon_intensity_elec",
+        pd.DataFrame({"carbon_intensity": [100.0, 400.0], "generation_twh": [30.0, 10.0]}),
+        175.0,
+        "Un país de 30 TWh emite 100 g por kWh y otro de 10 TWh, 400. Ponderado: (100 × 30 + 400 × 10) / 40 = 7 000 / 40 = 175 g por kWh (el promedio simple, 250, daría el mismo peso al país chico).",
+    ),
+    HandExample(
+        "vaccination_complete_share",
+        pd.DataFrame(
+            {
+                "country": ["A", "A", "B", "B"],
+                "week": [T("2021-06-06"), T("2021-06-13"), T("2021-06-06"), T("2021-06-13")],
+                "fully_vaccinated": [10.0, 30.0, 50.0, 90.0],
+                "population": [100.0, 100.0, 200.0, 200.0],
+            }
+        ),
+        0.4,
+        "Se toma la última semana de cada país: A tiene 30 de 100 y B tiene 90 de 200. (30 + 90) / (100 + 200) = 120 / 300 = 40 %. Las semanas anteriores no se suman: el dato es acumulado.",
+    ),
+    HandExample(
+        "deaths_per_million_week",
+        pd.DataFrame(
+            {"deaths": [30.0, 10.0, 20.0], "population": [2_000_000.0, 2_000_000.0, 4_000_000.0]}
+        ),
+        7.5,
+        "Tres filas (país y semana) con 30, 10 y 20 muertes y una población que suma 8 millones. 60 / 8 000 000 × 1 000 000 = 7.5 por millón por semana.",
+    ),
+    HandExample(
+        "mobile_penetration",
+        pd.DataFrame({"lines": [120.0, 90.0], "population": [100.0, 100.0]}),
+        105.0,
+        "Dos países de 100 habitantes con 120 y 90 líneas. (120 + 90) / 200 × 100 = 105 líneas por cada 100 habitantes.",
+    ),
+    HandExample(
+        "pupil_teacher_ratio",
+        pd.DataFrame({"student_ratio": [18.0, 30.0, 22.0, 15.0, 26.0]}),
+        22.0,
+        "Cinco registros ordenados: 15, 18, 22, 26 y 30 alumnos por docente. El del medio es 22.",
+    ),
+    HandExample(
+        "on_time_share",
+        pd.DataFrame({"delay_minutes": [-5.0, 0.0, 15.0, 16.0, 120.0]}),
+        0.6,
+        "Tolerancia de 15 minutos. Llegan a tiempo el adelantado (−5), el puntual (0) y el de 15 justos; fallan el de 16 y el de 120. 3 de 5 = 60 %.",
+    ),
+    HandExample(
+        "loan_growth",
+        pd.DataFrame(
+            {
+                "month": [
+                    T("2023-12-01"),
+                    T("2023-12-01"),
+                    T("2024-06-01"),
+                    T("2024-12-01"),
+                    T("2024-12-01"),
+                ],
+                "loan_balance": [600.0, 400.0, 1030.0, 700.0, 380.0],
+            }
+        ),
+        0.08,
+        "Último mes (dic 2024): 700 + 380 = 1 080. Doce meses antes (dic 2023): 600 + 400 = 1 000. 1 080 / 1 000 − 1 = 8.0 % (el mes de junio no entra).",
+    ),
+    HandExample(
+        "lines_growth",
+        pd.DataFrame({"year": [2016, 2016, 2017, 2017], "lines": [100.0, 300.0, 110.0, 302.0]}),
+        0.03,
+        "Año anterior: 100 + 300 = 400 líneas. Último año: 110 + 302 = 412. 412 / 400 − 1 = 3.0 %.",
+    ),
 ]
 
 BY_ID = {e.kpi_id: e for e in EXAMPLES}

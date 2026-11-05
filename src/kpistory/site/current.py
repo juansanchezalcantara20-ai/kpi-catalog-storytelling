@@ -142,6 +142,64 @@ def headline(
         out[f"dq_{dim}"] = Headline(
             d["passed"].sum() / d["total"].sum(), f"{len(d)} conjuntos de datos medidos"
         )
+    out.update(sector_headlines(t, e))
+    return out
+
+
+PAIS = "Perú"  # the sector cases compare Peru with the rest of South America
+
+
+def sector_headlines(t: dict[str, pd.DataFrame], e: Engine) -> dict[str, Headline]:
+    """Reference values of the sector KPIs: Peru (the country of the reader) or the whole sample."""
+    out: dict[str, Headline] = {}
+    c = t["creditos"]
+    last = c["month"].max()
+    out["npl_ratio"] = Headline(
+        e.compute("npl_ratio", c[c["month"].eq(last)]), f"{mes(last)}, toda la cartera"
+    )
+    out["loan_growth"] = Headline(
+        e.compute("loan_growth", c), f"{mes(last)} frente a {mes(last - pd.DateOffset(months=12))}"
+    )
+
+    en = t["energia_anual"]
+    pe = en[en["country"].eq(PAIS)]
+    y = int(pe["year"].max())
+    for k in ("renewable_share_elec", "fossil_share_elec", "carbon_intensity_elec"):
+        out[k] = Headline(e.compute(k, pe[pe["year"].eq(y)]), f"{PAIS}, {y}")
+
+    s = t["salud_semanal"]
+    ps = s[s["country"].eq(PAIS)]
+    wk = ps["week"].max()
+    out["vaccination_complete_share"] = Headline(
+        e.compute("vaccination_complete_share", ps), f"{PAIS}, al {fecha(wk)}"
+    )
+    year = ps[ps["week"] > wk - pd.Timedelta(days=364)]
+    out["deaths_per_million_week"] = Headline(
+        e.compute("deaths_per_million_week", year),
+        f"{PAIS}, promedio de las últimas 52 semanas con datos ({mes(year['week'].min())} – {mes(wk)})",
+    )
+
+    mo = t["moviles_anual"]
+    pm = mo[mo["country"].eq(PAIS)]
+    ym = int(pm["year"].max())
+    out["mobile_penetration"] = Headline(
+        e.compute("mobile_penetration", pm[pm["year"].eq(ym)]), f"{PAIS}, {ym}"
+    )
+    out["lines_growth"] = Headline(
+        e.compute("lines_growth", pm[pm["year"] >= ym - 1]), f"{PAIS}, {ym} frente a {ym - 1}"
+    )
+
+    d = t["docentes"]
+    pdoc = d[d["country"].eq(PAIS)]
+    yd = int(pdoc["year"].max())
+    out["pupil_teacher_ratio"] = Headline(
+        e.compute("pupil_teacher_ratio", pdoc[pdoc["year"] >= yd - 2]),
+        f"{PAIS}, todos los niveles, {yd - 2} a {yd}",
+    )
+    v = t["vuelos"]
+    out["on_time_share"] = Headline(
+        e.compute("on_time_share", v), f"{len(v):,} vuelos de la muestra".replace(",", " ")
+    )
     return out
 
 

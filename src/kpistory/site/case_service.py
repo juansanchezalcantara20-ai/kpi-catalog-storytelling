@@ -23,6 +23,7 @@ from .common import (
     tiles,
 )
 from .current import fecha, headline, mes, trimestre
+from .plantilla import ficha
 
 AGE_BUCKETS = [(0, 2, "0 a 2 días"), (2, 7, "3 a 7 días"), (7, 14, "8 a 14 días"), (14, 30, "15 a 30 días"), (30, 1e9, "más de 30 días")]  # fmt: skip
 PRIORITY_ORDER = ["Urgente", "Alta", "Media", "Baja"]
@@ -103,8 +104,8 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     by_prio = e.compute_by("sla_compliance", rq, "priority").set_index("priority").reindex(prios)
 
     md = [
-        "# Caso 1 · Atención de solicitudes: ¿cumplimos el plazo prometido?\n",
-        aviso_datos(manifest, ["tickets"]),
+        "# Atención de solicitudes: ¿cumplimos el plazo prometido?\n",
+        ficha("service", manifest) + aviso_datos(manifest, ["tickets"]),
     ]
     md.append(en_30_segundos(
         f"En {trimestre(q)}, {de_cada_100(sla, 'solicitudes')} se resolvieron dentro del {SLA}; la meta es "
@@ -131,14 +132,14 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         )
     ctx += ", ".join(f"**{p}** {_horas(deadlines[p])}" for p in prios) + ". "
     ctx += "Se atiende primero lo más urgente y, dentro de cada prioridad, lo más antiguo.\n\n"
-    md.append("## El contexto\n\n" + ctx)
+    md.append("## Problema\n\n" + ctx)
     md.append(
-        "## La pregunta del negocio\n\n"
+        "### La pregunta del negocio\n\n"
         + pregunta(
             "¿Estamos resolviendo las solicitudes dentro del plazo que prometimos y, si no, dónde y desde cuándo falla?"
         )
     )
-    md.append("## Los indicadores\n\n")
+    md.append("## Indicadores\n\n")
     md.append(
         tiles(
             e,
@@ -175,7 +176,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     )  # fmt: skip
 
     # ------------------------------------------------------------------- hallazgo
-    md.append("## Lo que encontramos\n\n")
+    md.append("## Análisis\n\n")
     when = f"desde {mes(first_below)}" if first_below is not None else "en ningún mes"
     vol = resolved.groupby("resolved_month").size()
     events = [(mes(first_below), "aquí empezó")] if first_below is not None else []
@@ -382,7 +383,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     )
 
     review = snapshot + pd.Timedelta(days=28)
-    md.append("## Qué decidimos\n\n")
+    md.append("## Solución\n\n")
     md.append(decisiones([
         (accion, "Jefe de la mesa de atención", fecha(review)),
         (f"Limpiar primero las {n(n_old)} solicitudes con más de {age_limit} días, empezando por «{top_open}», con una "
@@ -394,7 +395,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     v = get_valores(t, e, manifest)["service"]
     md.append(seccion_valor(e, v))
     md.append(seccion_decision(e, v, accion))
-    md.append("## Cómo lo seguimos midiendo\n\n")
+    md.append("### Cómo lo seguimos midiendo\n\n")
     md.append(seguimiento(e, [
         ("backlog_aged_share", "Cada semana, por equipo (avisa antes)", "Más de 20 % en un equipo dos semanas seguidas"),
         ("sla_compliance", "Cada mes, por equipo y prioridad", "Menos de 85 % en un equipo"),

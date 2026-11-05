@@ -49,7 +49,7 @@ Cada decisión que no es obvia, con su motivo. Están agrupadas por etapa del pr
 
 | Decisión | Por qué |
 |---|---|
-| Todo lo que lee una persona está en español; los nombres internos del código quedan en inglés pero nunca se muestran sin su etiqueta. | El lector es un jefe de operaciones o un reclutador, no un programador. |
+| Todo lo que lee una persona está en español; los nombres internos del código quedan en inglés pero nunca se muestran sin su etiqueta. | El lector es un jefe de operaciones o un gerente, no un programador. |
 | Cada caso empieza con un recuadro «En 30 segundos» y termina con un «Detalle técnico» cerrado. | Quien decide lee lo primero; quien revisa el cálculo abre lo último. Solo ahí aparecen nombres de columnas y fórmulas. |
 | Las prioridades se llaman Urgente, Alta, Media y Baja, con su plazo al lado; los trimestres se escriben «oct–dic 2024». | Los códigos internos no le dicen nada a un lector común. |
 | Una prueba automática revisa la legibilidad de cada página publicada. | Falla si encuentra palabras técnicas en inglés, siglas sin explicar o código fuera del detalle técnico. |
@@ -80,3 +80,22 @@ Cada decisión que no es obvia, con su motivo. Están agrupadas por etapa del pr
 | La revisión visual con Playwright (escritorio y celular de 390 px) corre en el entorno de desarrollo y deja capturas en el repositorio; no corre en cada cambio de la nube. | Instalar un navegador completo en cada ejecución es lento; las pruebas de legibilidad, coherencia y gráficos sí corren siempre. |
 | Los nombres de los campos del catálogo siguen en inglés (por ejemplo, el nombre del indicador y su definición corta); sus valores están en español. | Son identificadores internos, como acordamos; el lector nunca los ve. |
 | Al revisar las cifras, el cumplimiento del plazo en el tablero publicado (94.4 %, todo el año) no coincidía con el del caso (89.2 %, último trimestre). Ahora todos muestran el mismo valor de referencia con su periodo. | Era un error de coherencia: dos periodos distintos para la misma tarjeta. |
+
+## 6 · Rubros, temas y casos «Problema → Solución → Resultado»
+
+| Decisión | Por qué |
+|---|---|
+| El sitio se organiza en dos ejes: rubro (sector) y tema (tipo de problema). Los rubros y temas se definen en un archivo propio; el tema y los rubros de cada indicador, en el catálogo. | Así la lista de indicadores de un rubro se deriva del catálogo y no se escribe dos veces. |
+| Cada caso usa la misma plantilla de siete partes y su resultado lleva una de dos etiquetas: «Resultado observado en datos reales» o «Resultado estimado (escenario)». | El lector tiene que saber si un número pasó o si es una proyección. |
+| Un resultado solo es «observado» si hay un evento documentado con su fuente enlazada y los datos de esa versión son reales; si la descarga falla, la página baja sola a «estimado». | «No inventar eventos»: sin la fuente que documenta el cambio, no se presenta como causa. |
+| Se encontraron dos resultados observados (el plan de retiro del carbón en Chile, 2019, y el inicio de la vacunación en Perú, 2021), no tres. | Los demás casos no tienen un evento documentado que coincida con sus datos; era mejor dos honestos que tres dudosos. |
+| Los resultados observados dicen «coincide con», no «se debe a», y nombran otras causas posibles. | Una coincidencia en el tiempo no prueba que una sola medida causó el cambio. |
+| Los casos comparan grupos (países, regiones, niveles, tipos de entidad, franjas horarias), nunca empresas con nombre. | Comparar grupos enseña el método sin señalar a nadie. |
+| Las fuentes nuevas se descargan de repositorios públicos en GitHub (Our World in Data, TidyTuesday, vega-datasets). | Son las únicas que se pudieron descargar y verificar desde el entorno de desarrollo, sin cuenta ni clave. |
+| Banca usa una cartera simulada. Las series del Banco Central de Reserva del Perú quedan como candidatas. | Su interfaz es abierta, pero no respondió desde el entorno de desarrollo y no se pudo verificar su formato. |
+| AI4I 2020 se presenta como «conjunto de referencia» y cuenta como dato simulado. | Su publicador lo describe como un conjunto sintético; antes el sitio lo llamaba «datos reales» y era impreciso. |
+| Cada caso declara sus indicadores de resultado, adelantados y de contrapeso; si la fuente no permite medir uno, el caso lo dice. | Es mejor un hueco explicado que un indicador forzado con datos que no lo miden. |
+| Los montos en soles solo existen en los cinco casos con supuestos de costo; en los rubros nuevos la alerta muestra el indicador sin costo. | Inventar el costo de una muerte, de un alumno o de un vuelo atrasado sería peor que no ponerlo. |
+| Algunas metas cambian por rubro (por ejemplo, disponibilidad 85 % en minería y 95 % en energía) y se muestran junto a la meta general. | La misma meta no tiene sentido en todos los sectores; el semáforo sigue usando la meta general para que un indicador tenga un solo estado. |
+| El tablero filtra por rubro y tema a la vez y guarda el filtro en la dirección de la página (por ejemplo, rubro minería y tema mantenimiento). | Un filtro que se puede compartir por enlace es más útil en una reunión. |
+| Una prueba revisa una lista de palabras prohibidas en todo el proyecto y que ninguna tabla publicada tenga columnas de datos personales. | Los rubros se presentan como sectores, y nunca se publican datos de personas. |

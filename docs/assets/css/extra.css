@@ -101,3 +101,23 @@
 .md-typeset .simulador .fila { display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; }
 .md-typeset .valor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; }
 @media (max-width: 600px) { .md-typeset .valor-card .grande { font-size: 1.4rem; } }
+
+/* ---------------------------------------------------------------- rubros y temas */
+.md-typeset .kpi-rol {
+  align-self: flex-start; font-size: 0.6rem; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase;
+  padding: 1px 8px; border-radius: 999px; background: #eef2f8; color: #1c5cab; margin-bottom: 2px;
+}
+.md-typeset .kpi-rol.rol-contrapeso { background: #f3f0e8; color: #6b5300; }
+.md-typeset .kpi-rol.rol-adelantados { background: #eaf5ec; color: #11632a; }
+.md-typeset .matriz { overflow-x: auto; margin: 0.6em 0 1em; }
+.md-typeset .matriz table.matriz-tabla { display: table; font-size: 0.6rem; border-collapse: collapse; table-layout: fixed; width: 100%; min-width: 560px; }
+.md-typeset .matriz table.matriz-tabla th:first-child { width: 15%; }
+.md-typeset .matriz table.matriz-tabla th, .md-typeset .matriz table.matriz-tabla td { overflow-wrap: anywhere; hyphens: auto; }
+.md-typeset .matriz th, .md-typeset .matriz td { padding: 6px 6px; vertical-align: top; border-bottom: 1px solid #e6e6e1; }
+.md-typeset .matriz thead th { font-weight: 600; }
+.md-typeset .matriz td.pendiente { color: #8a8a85; font-style: italic; }
+.md-typeset .matriz td.celda-caso { background: #f6f8fc; }
+.md-typeset .contador { font-size: 0.78rem; }
+.md-typeset .caso-ficha { font-size: 0.72rem; color: #55554f; }
+.md-typeset .rubro-selector select { font: inherit; padding: 4px 8px; border-radius: 6px; border: 1px solid #ccc; max-width: 100%; }
+.md-typeset .alertas-rubro ol li { margin-bottom: 0.6em; }

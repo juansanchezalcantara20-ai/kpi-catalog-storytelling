@@ -15,7 +15,19 @@ from . import catalog_pages
 from .current import headline
 from .data_sources import page as data_sources_page
 
-CASES = ["service", "maintenance", "inventory", "customers", "data_quality"]
+CASES = [
+    "service",
+    "maintenance",
+    "inventory",
+    "customers",
+    "data_quality",
+    "banca",
+    "energia",
+    "salud",
+    "telecom",
+    "educacion",
+    "logistica",
+]
 
 
 def _copy_plotly_js() -> None:
@@ -23,7 +35,7 @@ def _copy_plotly_js() -> None:
     dst = DOCS_DIR / "assets" / "js" / "plotly.min.js"
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, dst)
-    for name in ("plotly-es.js", "tooltips.js", "simulador.js"):
+    for name in ("plotly-es.js", "tooltips.js", "simulador.js", "rubros.js"):
         shutil.copyfile(Path(__file__).parent / "assets" / name, dst.parent / name)
 
 
@@ -52,12 +64,28 @@ def build() -> None:
         print("  page antipatterns.md")
     except ModuleNotFoundError:
         pass
+    from ..catalog import rubros_config
     from ..valor import get_valores
+    from . import ejes
     from .resumen import home_page, resumen_page
 
     vals = get_valores(tables, engine, manifest)
-    (DOCS_DIR / "resumen.md").write_text(resumen_page(vals, manifest), encoding="utf-8")
-    (DOCS_DIR / "index.md").write_text(home_page(vals, manifest), encoding="utf-8")
-    catalog_pages.write(engine, headline(tables, engine, manifest), DOCS_DIR / "catalog")
+    values = headline(tables, engine, manifest)
+    (DOCS_DIR / "resumen.md").write_text(
+        resumen_page(vals, manifest, engine, values), encoding="utf-8"
+    )
+    (DOCS_DIR / "index.md").write_text(home_page(vals, manifest, engine, values), encoding="utf-8")
+    cfg = rubros_config()
+    for folder, index, items, page in (
+        ("rubros", ejes.rubros_index(engine, manifest), cfg["rubros"], ejes.rubro_page),
+        ("temas", ejes.temas_index(engine), cfg["temas"], ejes.tema_page),
+    ):
+        out = DOCS_DIR / folder
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "index.md").write_text(index, encoding="utf-8")
+        for key in items:
+            (out / f"{key}.md").write_text(page(engine, values, manifest, key), encoding="utf-8")
+        print(f"  {folder}: {len(items)} pages")
+    catalog_pages.write(engine, values, DOCS_DIR / "catalog")
     (DOCS_DIR / "data-sources.md").write_text(data_sources_page(manifest), encoding="utf-8")
     print(f"  catalog pages: {len(engine.catalog) + 1}; data-sources.md")

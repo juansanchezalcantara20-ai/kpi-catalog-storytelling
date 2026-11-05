@@ -25,6 +25,7 @@ from .common import (
     tiles,
 )
 from .current import fecha, headline, mes
+from .plantilla import ficha
 
 
 def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
@@ -82,8 +83,8 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     faded_old = int(old["sku_group"].eq("Dejó de venderse").sum())
 
     md = [
-        "# Caso 3 · Inventario: ¿atendemos a los clientes sin inmovilizar dinero de más?\n",
-        aviso_datos(manifest, ["transactions", "inventory"]),
+        "# Inventario: ¿atendemos a los clientes sin inmovilizar dinero de más?\n",
+        ficha("inventory", manifest) + aviso_datos(manifest, ["transactions", "inventory"]),
     ]
     md.append(en_30_segundos(
         f"Se despacharon {de_cada_100(H['fill_rate'].value, 'unidades pedidas')}, pero solo "
@@ -93,19 +94,19 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         "Pronosticar la temporada con el año anterior, anticipar el inventario antes del pico y liquidar lo que dejó de venderse.",
     ))  # fmt: skip
     md.append(
-        "## El contexto\n\n"
+        "## Problema\n\n"
         "Una tienda en línea de artículos de regalo vende sobre todo a pequeños comercios; la demanda sube antes de "
         f"Navidad. El equipo de planificación pronostica cada producto con el **promedio de las últimas {MA_WEEKS} semanas**, "
         f"revisa el inventario cada lunes y pide hasta cubrir {ORDER_UP_TO_WEEKS:.0f} semanas de pronóstico a proveedores que "
         f"tardan entre 10 y 17 días. El caso sigue a los {N_TOP} productos más vendidos y a {N_FADED} que dejaron de venderse.\n\n"
     )
     md.append(
-        "## La pregunta del negocio\n\n"
+        "### La pregunta del negocio\n\n"
         + pregunta(
             "¿Nuestro inventario atiende a los clientes sin inmovilizar dinero de más, y qué rompe ese equilibrio?"
         )
     )
-    md.append("## Los indicadores\n\n")
+    md.append("## Indicadores\n\n")
     md.append(
         tiles(
             e,
@@ -129,7 +130,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     )
 
     md.append(bloque_bala(e, H, ["otif", "fill_rate", "obsolescence_share", "forecast_bias"]))
-    md.append("## Lo que encontramos\n\n")
+    md.append("## Análisis\n\n")
     ko = e.catalog["otif"]
     olm = ol.assign(m=ol["order_date"].dt.to_period("M").dt.start_time)
     olm = (
@@ -300,7 +301,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
         f"después de la temporada sigue alto y sobra inventario, que termina sin moverse. Al {fecha(end)}, {len(old)} productos "
         f"no se venden hace más de {age_limit} días.\n\n"
     )
-    md.append("## Qué decidimos\n\n")
+    md.append("## Solución\n\n")
     rows = [
         ("Pronosticar los productos de temporada con las mismas semanas del año anterior y su tendencia, desde septiembre.", "Planificador de demanda", fecha(end + pd.Timedelta(days=30))),
         ("Anticipar el inventario de los productos de temporada más vendidos antes del pico, según el nuevo pronóstico y el plazo del proveedor.", "Planificador de abastecimiento", fecha(end + pd.Timedelta(days=60))),
@@ -319,7 +320,7 @@ def build(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> str:
     v = get_valores(t, e, manifest)["inventory"]
     md.append(seccion_valor(e, v))
     md.append(seccion_decision(e, v, rows[0][0]))
-    md.append("## Cómo lo seguimos midiendo\n\n")
+    md.append("### Cómo lo seguimos midiendo\n\n")
     md.append(seguimiento(e, [
         ("forecast_bias", "Cada mes, por tipo de producto (avisa antes)", "Fuera de ± 10 % en un tipo de producto"),
         ("days_of_cover", "Cada semana, por producto", "Menos de 7 días en un producto principal: acelerar el pedido"),

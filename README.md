@@ -12,46 +12,65 @@ qué pasó y qué decidir, y un tablero interactivo para el seguimiento semanal.
 
 | | |
 |---|---|
-| **28 indicadores** en 5 temas | cada uno con la pregunta que responde, qué significa, cómo se calcula en palabras, un ejemplo con números, meta y semáforo, responsable, errores comunes de lectura, qué decisión ayuda a tomar y con qué otro indicador se equilibra |
-| **5 casos contados como historia** | en 30 segundos → pregunta → indicadores → lo que encontramos → qué decidimos → cómo lo seguimos midiendo → detalle técnico |
-| **Datos reales** | solicitudes ciudadanas de Nueva York (servicio 311) y dos conjuntos públicos del repositorio UCI, descargados cada mes en GitHub Actions |
-| **Fórmulas probadas** | un ejemplo calculado a mano por indicador, comprobado contra el cálculo en Python y contra una consulta SQL |
-| **Legibilidad probada** | una prueba automática falla si una página tiene palabras técnicas en inglés, siglas sin explicar o código fuera del detalle técnico |
-| **Valor en soles** | cada brecha se traduce a soles y horas, con un simulador «¿y si…?» y supuestos editables |
+| **9 rubros × 7 temas** | banca, retail, logística, minería, telecomunicaciones, salud, energía, educación y servicios; operaciones, costos, cliente, mantenimiento, inventario, personas y calidad de datos |
+| **39 indicadores** | cada uno con su tema, los rubros donde sirve, la pregunta que responde, cómo se calcula en palabras, un ejemplo con números, meta (y metas por rubro), semáforo, responsable, errores de lectura, decisión y contrapeso |
+| **11 casos «Problema → Solución → Resultado»** | en 30 segundos → problema → indicadores (resultado, adelantados, contrapeso) → análisis → solución → resultado → detalle técnico |
+| **Resultados honestos** | «observado en datos reales» solo con un evento documentado y su fuente; si no, «estimado (escenario)» |
+| **Datos públicos reales** | NYC 311, UCI, Our World in Data, UNESCO, UIT y la Oficina de Estadísticas de Transporte de EE. UU., descargados cada mes en GitHub Actions |
+| **Fórmulas probadas** | un ejemplo calculado a mano por indicador, comprobado contra el cálculo en Python y, en 30 indicadores, contra una consulta SQL |
+| **Legibilidad probada** | una prueba falla si una página tiene palabras técnicas en inglés, siglas sin explicar o código fuera del detalle técnico |
+
+## Los rubros y sus fuentes
+
+| Rubro | Fuente | Casos | Tipo de resultado |
+|---|---|---|---|
+| Banca, seguros y AFP | **simulado** (no hay fuente pública estable sin registro) | Morosidad de créditos | estimado |
+| Retail | Online Retail II (UCI, CC BY 4.0) + inventario y encuesta simulados | Inventario y demanda · Clientes · Calidad de los datos | estimado |
+| Logística y transporte | Oficina de Estadísticas de Transporte de EE. UU., muestra de 200 000 vuelos (vega-datasets) | Puntualidad en el transporte | estimado |
+| Minería | AI4I 2020 (UCI): conjunto de referencia, **sintético según su publicador** + órdenes simuladas | Mantenimiento de equipos · Calidad de los datos | estimado |
+| Telecomunicaciones | UIT vía Our World in Data (TidyTuesday) | Líneas móviles y mercado | estimado |
+| Salud | Our World in Data, vacunación y muertes por COVID-19 (CC BY 4.0) | Vacunación y mortalidad | **observado** (inicio de la vacunación en Perú, 9 feb 2021) |
+| Energía | Our World in Data, generación eléctrica (CC BY 4.0) | Generación eléctrica y combustibles fósiles | **observado** (plan de retiro del carbón en Chile, 4 jun 2019) |
+| Educación | Instituto de Estadística de la UNESCO (TidyTuesday) | Alumnos por docente | estimado |
+| Servicios y atención | NYC 311, Departamento de Transporte | Atención de solicitudes · Calidad de los datos | estimado |
+
+Los casos comparan **grupos** (países, regiones, niveles educativos, tipos de entidad, franjas horarias), nunca empresas
+con nombre. Si una descarga falla, el caso usa su plan B simulado, **lo dice** y su resultado pasa a «estimado».
 
 ## Recorrido en cinco minutos
 
-**1 · Resumen para gerencia.** Cuánto vale cerrar las brechas, las tres alertas más caras con acción, responsable y
-fecha, y el valor total en juego.
+**1 · La portada** dice cuántos casos tienen resultado observado y cuántos estimado, y muestra la matriz rubro × tema:
+cada celda abre un caso, el tablero filtrado o dice «pendiente».
 
-![Resumen para gerencia](docs/capturas/escritorio-resumen.png)
+![Matriz rubro × tema](docs/capturas/escritorio-portada-matriz.png)
 
-**2 · Cada caso empieza con «En 30 segundos»** y con una tarjeta por indicador. Al pasar el mouse (o tocar en el celular)
-se abre qué mide, cómo se calcula, por qué esa meta, qué decisión ayuda a tomar y con qué se equilibra.
+**2 · Cada rubro** explica en tres líneas cómo gana dinero, muestra de 6 a 8 indicadores como mini tablero, sus casos,
+dos errores comunes al medir y un botón al tablero ya filtrado.
 
-![Tooltip de una tarjeta](docs/capturas/escritorio-caso-tooltip.png)
+![Página de un rubro](docs/capturas/escritorio-rubro.png)
 
-**3 · El tablero** abre con el valor en juego y el simulador «¿y si…?»; al hacer clic en un indicador muestra la tendencia con
-la zona en meta y el margen de alerta, y un desglose: un clic en una barra filtra la tendencia.
+**3 · Cada caso** termina en un resultado etiquetado. Este es observado: enlaza el evento documentado y dice «coincide
+con», no «se debe a».
 
-![Tablero](docs/capturas/escritorio-tablero.png)
+![Resultado observado en datos reales](docs/capturas/escritorio-caso-resultado.png)
 
-**4 · En el celular** todo cabe sin desplazarse de lado, y el tooltip se abre completo con un toque.
+**4 · El tablero** se filtra por rubro y tema a la vez, y la dirección guarda el filtro
+(`#/rubro/mineria/tema/mantenimiento`), así que se puede compartir.
 
-![Tablero en el celular](docs/capturas/celular-tablero.png) ![Tooltip en el celular](docs/capturas/celular-caso-tooltip.png)
+![Tablero filtrado por rubro y tema](docs/capturas/escritorio-tablero-filtrado.png)
 
-**Antes y después** (versión publicada el 4 nov 2026 frente a esta):
+**5 · En el celular** todo cabe sin desplazarse de lado, y el tooltip se abre completo con un toque.
 
-| Antes | Después |
-|---|---|
-| ![Antes: tablero en inglés](docs/capturas/antes-tablero.png) | ![Después: tablero en español con valor](docs/capturas/despues-tablero.png) |
+![Caso en el celular](docs/capturas/celular-caso-observado.png) ![Tablero filtrado en el celular](docs/capturas/celular-tablero-filtrado.png)
 
-*Las capturas usan los datos de respaldo (simulados); el sitio publicado usa los datos reales de cada mes.*
+*Las capturas usan los datos sectoriales reales y, para NYC 311 y UCI, los datos de respaldo (simulados), porque esas
+direcciones no responden desde el entorno de desarrollo; el sitio publicado usa los datos reales de cada mes.*
 
 ## El valor en soles
 
-Cada caso traduce su brecha a soles y horas con supuestos de `config/supuestos_valor.yaml` (todos ilustrativos y
-editables en la web):
+Los cinco casos con supuestos de costo defendibles traducen su brecha a soles y horas con `config/supuestos_valor.yaml`
+(todos ilustrativos y editables en la web). En los demás rubros la alerta muestra el indicador fuera de meta **sin
+inventar un costo**. El «Resumen para gerencia» tiene un selector de rubro con sus alertas más caras.
 
 | Caso | Qué se cuesta | Supuesto principal |
 |---|---|---|
@@ -60,22 +79,6 @@ editables en la web):
 | Inventario | pedidos incompletos o tardíos e inventario sin movimiento | S/ 25 por pedido con problema; 25 % al año por mantener inventario |
 | Clientes | ingreso de clientes en riesgo | se pierde un margen de 30 % de lo que compraban |
 | Calidad de los datos | registros de venta con datos faltantes | S/ 4 (6 minutos) por registro corregido |
-
-Cada caso cierra el ciclo **decisión → resultado**: un escenario simulado y transparente de seis meses con y sin la
-decisión, el valor capturado y la respuesta a «¿es ruido?» con un intervalo.
-
-## Los casos
-
-| # | Caso | Indicadores | Datos |
-|---|------|------|------|
-| 1 | Atención de solicitudes: ¿cumplimos el plazo prometido? | cumplimiento del plazo, tiempo de resolución, pendientes antiguas, primera respuesta, resuelto en el primer contacto, reapertura | **Reales:** NYC 311, Departamento de Transporte, últimos 12 meses |
-| 2 | Mantenimiento | disponibilidad, tiempo entre fallas, tiempo de reparación, preventivo a tiempo, trabajo planificado | **Reales:** AI4I 2020 (UCI) + órdenes de trabajo simuladas |
-| 3 | Inventario y demanda | unidades atendidas, pedidos completos y a tiempo, quiebres, cobertura, rotación, inventario sin movimiento, error y sesgo del pronóstico | **Reales:** ventas de Online Retail II (UCI) + inventario simulado |
-| 4 | Clientes | clientes que vuelven, recompra, ingreso en riesgo, recomendación | **Reales:** Online Retail II (UCI) + encuesta simulada |
-| 5 | Calidad de los datos | completitud, unicidad, validez, oportunidad | los datos de los casos 1 a 4 tal como llegan |
-
-Si una descarga falla, ese caso vuelve a datos simulados con semilla fija y **la página lo dice**. Detalle en
-[`cases/`](cases/README.md) y en la página *Fuentes de datos* del sitio.
 
 ## Cómo actualizar los datos
 
@@ -95,7 +98,7 @@ kpis/catalog.yaml  ──►  validación (esquema + reglas de coherencia)
         ├─► kpistory.formulas   una función de Python por indicador
         └─► sql: en el catálogo  consulta de referencia, probada en SQLite
 
-config/fuentes.yaml ─► descarga (NYC 311, UCI) o plan B ─► kpistory.engine ─┬─► historias (MkDocs + Plotly)
+config/fuentes.yaml ─► descarga (7 fuentes públicas) o plan B ─► kpistory.engine ─┬─► casos, rubros y temas (MkDocs + Plotly)
                                                                               └─► tablero interactivo
                                                      candado de privacidad ──► GitHub Pages
 ```
@@ -103,8 +106,11 @@ config/fuentes.yaml ─► descarga (NYC 311, UCI) o plan B ─► kpistory.engi
 - **Una sola fuente de verdad.** La validación falla si un indicador no tiene función de cálculo, si sobra una función,
   si la meta contradice el sentido del indicador o si un parámetro no está declarado.
 - **Un solo valor por indicador.** Caso, catálogo y tablero leen el mismo valor de referencia; una prueba lo comprueba.
+- **Dos ejes.** `config/rubros.yaml` define rubros y temas; el catálogo asigna a cada indicador su tema y sus rubros, y
+  la validación falla si un rubro no tiene caso o si un resultado «observado» no tiene evento con fuente.
 - **Privacidad.** De NYC 311 solo se descargan número, fechas, tipo, canal, estado y distrito; un control impide publicar
-  si aparece un correo, un teléfono, una dirección o un archivo de datos crudos.
+  si aparece un correo, un teléfono, una dirección o un archivo de datos crudos, y una prueba revisa que ninguna tabla
+  publicada tenga columnas de datos personales.
 
 Para desarrollar sin instalar nada localmente: **Code → Codespaces → Create codespace** (el entorno está en
 `.devcontainer/`). Dentro del Codespace:
@@ -125,17 +131,17 @@ NODE_PATH=$(npm root -g) node tools/revision_visual.js
 
 ## Qué demuestra
 
-| Lo que piden las vacantes | Dónde está |
+| Capacidad | Dónde está |
 |---|---|
-| **Diseño de indicadores** (control de gestión, planeamiento y control) | `kpis/catalog.yaml`: pregunta, definición, cálculo, meta, semáforo, responsable, errores de lectura, decisión y contrapeso de 28 indicadores |
-| **Leer indicadores con criterio** | adelantados frente a atrasados, mediana frente a promedio, unidades frente a pedidos completos, error ponderado frente a promedio, sesgo con franja, recomendación con margen de error, y la revisión de la aparente contradicción del caso 1 |
-| **Contar historias con datos** | cinco casos con la misma estructura; títulos que son conclusiones; decisiones con responsable y fecha |
-| **Diseño de tableros** | tarjetas con semáforo y tooltip, gráficos según la pregunta (bala, Pareto, cascada, pequeños múltiples), zonas de meta y alerta, desglose con drill-down |
-| **Traducir indicadores a dinero** | brecha → unidades afectadas → soles y horas al mes, simulador «¿y si…?», resumen para gerencia con las alertas más caras |
-| **SQL** | consulta de referencia para 23 indicadores, probada contra los ejemplos calculados a mano |
-| **Datos reales y automatización** | descarga paginada con reintentos y mínimo de filas, actualización mensual en GitHub Actions, plan B con aviso |
-| **Calidad y gobierno de datos** | cuatro dimensiones de calidad como indicadores, reglas por conjunto de datos y candado de privacidad |
-| **Excelencia operacional y mejora continua** | capacidad y pendientes (atención), mantenimiento por condición y repuestos (mantenimiento), pronóstico de temporada (inventario), lista de recuperación (clientes) |
+| **Diseño de indicadores** (control de gestión, planeamiento y control) | `kpis/catalog.yaml`: 39 indicadores con tema, rubros, metas por rubro, decisión y contrapeso |
+| **Conocer el negocio de cada sector** | `config/rubros.yaml`: cómo gana dinero cada rubro y dos errores comunes al medirlo |
+| **Leer indicadores con criterio** | adelantados frente a resultados, mediana frente a promedio, ponderar por tamaño, «coincide con» frente a «se debe a» |
+| **Contar historias con datos** | once casos con la misma plantilla «Problema → Solución → Resultado»; títulos que son conclusiones |
+| **Diseño de tableros** | filtros combinables por rubro y tema con dirección compartible, semáforo, tooltip, desglose con drill-down |
+| **Traducir indicadores a dinero** | brecha → unidades → soles y horas, simulador «¿y si…?», alertas más caras por rubro |
+| **SQL** | consulta de referencia para 30 indicadores, probada contra los ejemplos calculados a mano |
+| **Datos reales y automatización** | siete fuentes públicas sin clave, mínimo de filas, plan B con aviso, actualización mensual en GitHub Actions |
+| **Calidad, gobierno de datos y privacidad** | cuatro dimensiones de calidad como indicadores, candado de privacidad y prueba de columnas personales |
 
 ## Cómo se hizo
 
@@ -149,6 +155,10 @@ los gráficos, las reglas de honestidad y las etapas. Todas las decisiones y sus
 - **Datos.** Solo datos públicos o simulados. Ningún dato, nombre, cifra ni caso de empleadores o clientes reales.
 - **Lo simulado es método, no evidencia.** Las órdenes de trabajo, el inventario, el pronóstico, las entregas y la
   encuesta son simulaciones con reglas explícitas; lo que muestran ilustra el método, no describe una operación real.
+- **Resultados observados con cautela.** Los dos resultados observados (Chile y el carbón; Perú y la vacunación)
+  coinciden en el tiempo con un evento documentado; los datos no prueban que esa sola medida los causó.
+- **Rubros sin fuente real.** Banca usa una cartera simulada; minería usa AI4I, que su publicador describe como
+  sintético. Las series del Banco Central de Reserva del Perú quedaron como candidatas (ver *Fuentes*).
 - **Supuestos propios.** La prioridad y el plazo de cada tipo de reclamo de NYC 311 son un supuesto de este proyecto,
   no una regla de la ciudad. NYC 311 no registra primera respuesta, contactos ni reaperturas: esos indicadores
   aparecen «Sin dato» con datos reales.
@@ -159,12 +169,12 @@ los gráficos, las reglas de honestidad y las etapas. Todas las decisiones y sus
 
 ```
 kpis/                catálogo de indicadores, su esquema y las reglas de calidad de datos
-config/              fuentes públicas (dirección, filtros, periodo) y supuestos de valor en soles
+config/              rubros y temas, fuentes públicas (dirección, licencia, filtros) y supuestos de valor en soles
 src/kpistory/        motor, fórmulas, datos, gráficos, sitio, tablero y candado de privacidad
 tests/               ejemplos calculados a mano y pruebas de fórmulas, SQL, datos, fuentes, legibilidad, coherencia, valor y gráficos
 tools/               revisión visual con Playwright
 includes/            glosario de siglas que el sitio muestra al pasar el mouse
-cases/               un README por caso: fuente, plan B, semilla y supuestos
+cases/               resumen de los casos y un README por cada caso con simulador
 docs/                páginas fijas del sitio, registro de decisiones y capturas (docs/capturas)
 .devcontainer/       entorno de GitHub Codespaces
 .github/workflows/   CI (cada cambio) y Actualizar datos (mensual, manual y en cada cambio de la rama principal)

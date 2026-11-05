@@ -1,0 +1,115 @@
+# Rubros (sectores) y temas: los dos ejes con los que se organiza el sitio.
+#
+# Un indicador pertenece a un tema (kpis/catalog.yaml, campo `tema`) y puede servir en varios
+# rubros (campo `rubros`). Cada caso pertenece a uno o más rubros. Los rubros se presentan
+# como sectores de la economía; no describen ninguna empresa real.
+
+temas:
+  operaciones: {nombre: "Operaciones y procesos", pregunta: "¿El trabajo sale a tiempo y sin acumularse?"}
+  costos: {nombre: "Costos y finanzas", pregunta: "¿Dónde se pierde dinero o se arriesga?"}
+  cliente: {nombre: "Cliente y calidad de servicio", pregunta: "¿El cliente recibe lo que se le prometió y vuelve?"}
+  mantenimiento: {nombre: "Mantenimiento y activos", pregunta: "¿Los equipos están disponibles cuando se necesitan?"}
+  inventario: {nombre: "Inventario y cadena de suministro", pregunta: "¿Hay lo que se necesita, sin exceso?"}
+  personas: {nombre: "Personas", pregunta: "¿La carga de trabajo de cada persona es razonable?"}
+  datos: {nombre: "Calidad de datos", pregunta: "¿Se puede confiar en los números antes de decidir?"}
+
+rubros:
+  banca:
+    nombre: "Banca, seguros y AFP"
+    como_gana:
+      - "Presta dinero y cobra intereses; gana la diferencia entre lo que cobra y lo que paga por los depósitos."
+      - "Cobra comisiones por cuentas, tarjetas, seguros y administración de fondos."
+      - "Pierde cuando un crédito no se paga: por eso separa dinero (provisiones) para la morosidad esperada."
+    errores:
+      - error: "Mirar la morosidad de toda la cartera y no por tipo de crédito."
+        mejor: "Una cartera grande y sana esconde un segmento que se deteriora: compare por segmento y por tipo de entidad."
+      - error: "Celebrar que la morosidad bajó porque la cartera creció."
+        mejor: "Si los créditos nuevos todavía no vencen, el porcentaje baja solo; mire la morosidad de cada promoción de créditos."
+  retail:
+    nombre: "Retail"
+    como_gana:
+      - "Compra mercadería, la vende con un margen y gana con el volumen."
+      - "El inventario es dinero inmovilizado: lo que no se vende pierde valor."
+      - "El cliente que vuelve a comprar cuesta mucho menos que conseguir uno nuevo."
+    errores:
+      - error: "Medir unidades atendidas y decir que el cliente quedó servido."
+        mejor: "Un pedido con una línea faltante es un pedido fallido para el cliente: mida pedidos completos y a tiempo."
+      - error: "Usar el error promedio del pronóstico sin ponderar por volumen."
+        mejor: "Los productos pequeños lo disparan; el error ponderado por volumen dice cuánto inventario se equivocó."
+  logistica:
+    nombre: "Logística y transporte"
+    como_gana:
+      - "Cobra por mover carga o personas de un punto a otro en un plazo prometido."
+      - "Sus costos son flota, combustible y personas; un vehículo parado o un viaje vacío es margen perdido."
+      - "Los atrasos se propagan: un viaje tarde atrasa al siguiente."
+    errores:
+      - error: "Promediar los minutos de atraso."
+        mejor: "Unos pocos viajes muy atrasados disparan el promedio; mida qué parte llega dentro de la tolerancia."
+      - error: "Comparar puntualidad sin separar por hora del día."
+        mejor: "Los atrasos se acumulan durante el día: la misma operación se ve bien de mañana y mal de noche."
+  mineria:
+    nombre: "Minería"
+    como_gana:
+      - "Vende mineral o concentrado a precio internacional: no controla el precio, sí el costo por tonelada."
+      - "El costo depende de mover mucho material con equipos muy caros: cada hora parada es producción perdida."
+      - "Por eso el mantenimiento de equipos es una de sus palancas principales."
+    errores:
+      - error: "Mirar solo la disponibilidad promedio de la flota."
+        mejor: "Un promedio alto esconde equipos que fallan una y otra vez; mire el tiempo entre fallas por equipo."
+      - error: "Celebrar el preventivo cumplido sin mirar si bajaron las fallas."
+        mejor: "Hacer el preventivo a tiempo es un medio; el resultado es menos paradas no planificadas."
+  telecom:
+    nombre: "Telecomunicaciones"
+    como_gana:
+      - "Cobra una tarifa mensual por línea, plan de datos o internet fijo."
+      - "Su inversión en red es fija: gana cuando suma usuarios sin perder los que tiene."
+      - "Un cliente que se va se lleva años de ingresos; la atención de reclamos es parte del producto."
+    errores:
+      - error: "Leer más de 100 líneas por cada 100 habitantes como mercado lleno."
+        mejor: "Una persona puede tener dos líneas y otra ninguna; la penetración mide líneas, no personas conectadas."
+      - error: "Medir el tiempo de respuesta del reclamo y no si se resolvió."
+        mejor: "Responder rápido sin resolver genera un segundo reclamo; mírelo junto a «resuelto en el primer contacto»."
+  salud:
+    nombre: "Salud"
+    como_gana:
+      - "Los prestadores públicos se financian con presupuesto por población atendida; los privados, por atención o por afiliado."
+      - "En ambos casos el resultado que importa es la salud de la población, no la cantidad de atenciones."
+      - "La prevención (como la vacunación) evita atenciones caras más adelante."
+    errores:
+      - error: "Comparar muertes totales entre países o regiones de distinto tamaño."
+        mejor: "Divida por la población (por millón de habitantes) antes de comparar."
+      - error: "Atribuir toda mejora a una sola medida."
+        mejor: "Un resultado de salud tiene varias causas a la vez; diga «coincide con», no «se debe a», salvo con un diseño que lo pruebe."
+  energia:
+    nombre: "Energía"
+    como_gana:
+      - "Las generadoras venden energía; las de menor costo variable (agua, sol, viento) despachan primero."
+      - "Depender de combustibles fósiles expone el costo al precio del gas, del carbón o del petróleo."
+      - "Las centrales y redes son activos caros que tienen que estar disponibles."
+    errores:
+      - error: "Comparar la generación renovable de un año seco con la de un año lluvioso como si fuera una tendencia."
+        mejor: "La generación hidráulica depende de las lluvias; mire varios años antes de concluir."
+      - error: "Confundir energía total con electricidad."
+        mejor: "La electricidad es solo una parte del consumo de energía; este sitio mide la generación eléctrica."
+  educacion:
+    nombre: "Educación"
+    como_gana:
+      - "Los colegios y universidades privados cobran pensiones; los públicos reciben presupuesto por alumno."
+      - "Su principal costo son los docentes: la cantidad de alumnos por docente define costo y calidad a la vez."
+      - "El resultado que importa es que el alumno aprenda y termine, no solo que se matricule."
+    errores:
+      - error: "Leer menos alumnos por docente siempre como mejor."
+        mejor: "Por debajo de cierto número sube el costo sin mejorar el aprendizaje; es un indicador con equilibrio."
+      - error: "Comparar el promedio nacional sin separar el nivel educativo."
+        mejor: "Primaria y secundaria tienen realidades distintas; compare cada nivel por separado."
+  servicios:
+    nombre: "Servicios y atención"
+    como_gana:
+      - "Vende tiempo de personas: cada solicitud atendida tiene un costo y un plazo prometido."
+      - "El plazo cumplido es lo que el cliente compra; el incumplimiento genera nuevos contactos y reclamos."
+      - "Las pendientes antiguas son trabajo que se paga dos veces: al atenderlo y al responder el reclamo."
+    errores:
+      - error: "Medir el tiempo de resolución solo de las solicitudes cerradas."
+        mejor: "Las que siguen abiertas no aparecen; mírelo junto a las pendientes con más de 7 días."
+      - error: "Usar el promedio de horas de atención."
+        mejor: "Unas pocas solicitudes muy largas lo disparan; use la solicitud típica (la del medio)."

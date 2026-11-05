@@ -28,11 +28,14 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -e ".[dev]"
-      - name: Guardar las descargas de UCI entre ejecuciones (NYC 311 se descarga siempre)
+      - name: Mes de la descarga
+        id: mes
+        run: echo "mes=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+      - name: Guardar las descargas del mes entre ejecuciones (NYC 311 se descarga siempre)
         uses: actions/cache@v4
         with:
           path: data/raw
-          key: raw-data-v1
+          key: raw-data-v2-${{ steps.mes.outputs.mes }}
       - name: Descargar, calcular, probar y construir el sitio
         run: make all SOURCE=auto
       - name: Resumen de las fuentes usadas
@@ -41,7 +44,8 @@ jobs:
           import json
           m = json.load(open("data/processed/manifest.json"))
           print("| Datos | Origen | Detalle |\n|---|---|---|")
-          for k in ("tickets", "process_data", "work_orders", "transactions", "inventory", "survey"):
+          for k in ("tickets", "process_data", "work_orders", "transactions", "inventory", "survey",
+                    "energia", "salud", "moviles", "docentes", "vuelos", "creditos"):
               print(f"| {m[k]['name']} | {m[k]['origin']} | {m[k]['note'][:150]} |")
           PY
       - uses: actions/upload-pages-artifact@v3

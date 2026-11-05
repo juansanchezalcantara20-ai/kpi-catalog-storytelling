@@ -3,7 +3,8 @@
 The story pages explain *why*; the dashboard is the weekly monitoring view. It opens with the
 management summary (value at stake, the three most expensive alerts and the "¿y si…?" simulator),
 then every KPI of the catalog as a card (value, status, target, sparkline with the target) with
-an accessible tooltip, filters by domain and status, and a detail panel: the trend with the target
+an accessible tooltip, combinable filters by rubro (sector), tema (theme) and status, kept in the
+address (#/rubro/mineria/tema/mantenimiento), and a detail panel: the trend with the target
 and alert zones, a breakdown by group and a drill-down (click a bar to filter the trend).
 Card values come from `headline()` and money from `valor.get_valores()`, the same functions the
 story pages use, so the numbers always agree (tested). Output: docs/dashboard/index.html.
@@ -18,6 +19,7 @@ from typing import Any
 
 import pandas as pd
 
+from .catalog import rubros_config
 from .data.pipeline import load_tables
 from .engine import Engine, format_threshold, format_value
 from .formulas.customers import retention_series
@@ -27,13 +29,89 @@ from .site.current import fecha, headline, mes, trimestre
 from .valor import get_valores, monthly_series, top_alertas, total_anio
 from .viz import theme
 
-CASES_ES = {
-    "service": "Atención de solicitudes",
-    "maintenance": "Mantenimiento",
-    "inventory": "Inventario",
-    "customers": "Clientes",
-    "data_quality": "Calidad de los datos",
-}
+PAIS = "Perú"
+
+
+def _sector_trend(
+    e: Engine, kpi: str, df: pd.DataFrame, col: str, xfmt, label: str, group_label: str = "por país"
+) -> dict[str, Any]:
+    """Trend of the reference group (Peru) plus a breakdown by country with one trend each (drill-down)."""
+    f = df[df["country"].eq(PAIS)]
+    r = e.compute_by(kpi, f, col).dropna(subset=["value"])
+    last = sorted(f[col].unique())[-1]
+    g = e.compute_by(kpi, df[df[col].eq(last)], "country").dropna(subset=["value"])
+    trends = {
+        str(name): {"x": [xfmt(v) for v in sub[col]], "y": sub["value"].tolist(), "n": []}
+        for name, sub in e.compute_by(kpi, df, ["country", col])
+        .dropna(subset=["value"])
+        .groupby("country")
+    }
+    return {
+        "kind": "time", "label": f"{PAIS}, {label}", "x": [xfmt(v) for v in r[col]], "y": r["value"].tolist(), "n": [], "n_label": "",
+        "breakdown": {"label": f"{group_label}, {xfmt(last)}", "groups": [{"name": str(a), "value": b, "n": 0.0} for a, b in zip(g["country"], g["value"], strict=True)],
+                      "trends": trends},
+    }  # fmt: skip
+
+
+def sector_series(t: dict[str, pd.DataFrame], e: Engine) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    c = t["creditos"].copy()
+    c["month"] = pd.to_datetime(c["month"])
+    out["npl_ratio"] = _trend(
+        e,
+        "npl_ratio",
+        c,
+        "month",
+        "por mes",
+        "filas de la cartera",
+        group="segment",
+        group_label="por segmento",
+    )
+    months = sorted(c["month"].unique())[12:]
+    gr = [e.compute("loan_growth", c[c["month"].le(m)]) for m in months]
+    out["loan_growth"] = {
+        "kind": "time",
+        "label": "por mes, frente a 12 meses antes",
+        "x": [mes(m) for m in months],
+        "y": gr,
+        "n": [],
+        "n_label": "",
+    }
+    en = t["energia_anual"]
+    for k in ("renewable_share_elec", "fossil_share_elec", "carbon_intensity_elec"):
+        out[k] = _sector_trend(e, k, en, "year", str, "por año")
+    s = t["salud_semanal"].copy()
+    s["month"] = pd.to_datetime(s["week"]).dt.to_period("M").dt.start_time
+    for k in ("vaccination_complete_share", "deaths_per_million_week"):
+        out[k] = _sector_trend(e, k, s, "month", mes, "por mes")
+    mo = t["moviles_anual"]
+    out["mobile_penetration"] = _sector_trend(e, "mobile_penetration", mo, "year", str, "por año")
+    pm = mo[mo["country"].eq(PAIS)]
+    ys = sorted(pm["year"].unique())[1:]
+    out["lines_growth"] = {"kind": "time", "label": f"{PAIS}, por año", "x": [str(y) for y in ys],
+                           "y": [e.compute("lines_growth", pm[pm["year"].isin([y - 1, y])]) for y in ys], "n": [], "n_label": ""}  # fmt: skip
+    d = t["docentes"]
+    rec = d[d["year"] >= d["year"].max() - 2]
+    lv = e.compute_by("pupil_teacher_ratio", rec, "level")
+    out["pupil_teacher_ratio"] = {"kind": "category", "label": "por nivel, Sudamérica, últimos tres años", "x": lv["level"].tolist(),
+                                  "y": lv["value"].tolist(), "n": rec.groupby("level").size().reindex(lv["level"]).astype(float).tolist(), "n_label": "registros"}  # fmt: skip
+    v = t["vuelos"]
+    hb = e.compute_by("on_time_share", v, "hour_band")
+    order = [
+        "Madrugada (0 a 6 h)",
+        "Mañana (6 a 10 h)",
+        "Mediodía (10 a 14 h)",
+        "Tarde (14 a 18 h)",
+        "Noche (18 a 24 h)",
+    ]
+    hb = (
+        hb.set_index("hour_band")
+        .reindex([o for o in order if o in set(hb["hour_band"])])
+        .reset_index()
+    )
+    out["on_time_share"] = {"kind": "category", "label": "por franja horaria de salida", "x": hb["hour_band"].tolist(), "y": hb["value"].tolist(),
+                            "n": v.groupby("hour_band").size().reindex(hb["hour_band"]).astype(float).tolist(), "n_label": "vuelos"}  # fmt: skip
+    return out
 
 
 def _month(s: pd.Series) -> pd.Series:
@@ -287,6 +365,7 @@ def series(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> dict[str, d
         sub = dq[dq["dimension"].eq(dim) & (dq["total"] > 0)]
         out[f"dq_{dim}"] = {"kind": "category", "label": "por conjunto de datos", "x": sub["label"].str.replace(r" \(.*\)", "", regex=True).tolist(),
                             "y": sub["value"].tolist(), "n": sub["total"].tolist(), "n_label": "registros revisados"}  # fmt: skip
+    out.update(sector_series(t, e))
     return out
 
 
@@ -319,7 +398,7 @@ def payload(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> dict[str, 
         status = e.status(k.id, v)
         kpis.append(
             {
-                "id": k.id, "name": k.name, "case": k.case, "unit": k.unit, "direction": k.direction, "value": v,
+                "id": k.id, "name": k.name, "case": k.case, "case_title": e.catalog.cases[k.case]["title"], "rubros": k.rubros, "tema": k.tema, "unit": k.unit, "direction": k.direction, "value": v,
                 "display": format_value(k, v) if not math.isnan(v) else "Sin dato", "period": h.note or h.period,
                 "status": status, "rule": status_rule(k, status), "target": format_threshold(k, with_alert=False),
                 "target_full": format_threshold(k), "target_value": k.target, "green": k.thresholds["green"],
@@ -341,7 +420,10 @@ def payload(t: dict[str, pd.DataFrame], e: Engine, manifest: dict) -> dict[str, 
     origins = {manifest[key]["origin"] for key in ("tickets", "process_data", "transactions")}
     return _clean(
         {
-            "cases": CASES_ES,
+            "cases": {c: d["title"] for c, d in e.catalog.cases.items()},
+            "case_rubros": {c: d["rubros"] for c, d in e.catalog.cases.items()},
+            "rubros": {r: d["nombre"] for r, d in rubros_config()["rubros"].items()},
+            "temas": {r: d["nombre"] for r, d in rubros_config()["temas"].items()},
             "kpis": kpis,
             "valor": {
                 "casos": casos,
@@ -395,6 +477,8 @@ h2 { font-size: 16px; margin: 6px 0 10px; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-bottom: 14px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { border: 1px solid var(--grid); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 5px 12px; cursor: pointer; font: inherit; font-size: 13px; }
+.filtros { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.filtros select { font: inherit; font-size: 13px; padding: 5px 8px; border: 1px solid var(--grid); border-radius: 8px; background: var(--surface); color: var(--ink); max-width: 100%; }
 .chip[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
 .summary { font-size: 13px; color: var(--ink-2); }
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 16px; align-items: start; }
@@ -448,7 +532,8 @@ footer { color: var(--muted); font-size: 12px; margin-top: 18px; }
   </section>
   <h2>Indicadores</h2>
   <div class="toolbar">
-    <div class="chips" id="temas" role="group" aria-label="Dominio"></div>
+    <div class="filtros"><label for="f-rubro">Rubro</label><select id="f-rubro"></select>
+    <label for="f-tema">Tema</label><select id="f-tema"></select></div>
     <div class="chips" id="estados" role="group" aria-label="Semáforo"></div>
     <span class="summary" id="resumen" aria-live="polite"></span>
   </div>
@@ -467,13 +552,14 @@ const DATA = __PAYLOAD__;
 const ICON = {green: "🟢", amber: "🟡", red: "🔴", "n/a": "⚪"};
 const WORD = {green: "En meta", amber: "Vigilar", red: "Actuar", "n/a": "Sin dato"};
 const COLOR = {green: "__GOOD__", amber: "__WATCH__", red: "__ACT__", "n/a": "__CONTEXT__"};
-const state = {caseId: "all", status: "all", kpi: null, group: null};
+const state = {rubro: "all", tema: "all", status: "all", kpi: null, group: null};
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 const num = (x, d = 0) => x.toLocaleString("en-US", {minimumFractionDigits: d, maximumFractionDigits: d}).replace(/,/g, " ");
 const soles = x => "S/ " + num(Math.round(x));
 
 function isPct(k) { return k.unit === "percent"; }
-function suffix(k) { return isPct(k) ? " %" : ({hours: " h", days: " días", times_per_year: " veces al año"}[k.unit] || ""); }
+function suffix(k) { return isPct(k) ? " %" : ({hours: " h", days: " días", times_per_year: " veces al año", g_per_kwh: " g por kWh", per_million: " por millón", per_100: " por cada 100", ratio: " alumnos por docente"}[k.unit] || ""); }
+function axisSuffix(k) { return isPct(k) ? " %" : ({hours: " h", days: " días"}[k.unit] || ""); }
 function fmt(k, v) {
   if (v === null || v === undefined) return "sin dato";
   if (k.unit === "score") return (v >= 0 ? "+" : "") + v.toFixed(0);
@@ -532,26 +618,55 @@ function tipHtml(k) {
     <div class="kpi-tip" role="tooltip" id="regla-${k.id}" hidden>${esc(k.rule)}</div>`;
 }
 function chips() {
-  const temas = [["all", "Todos los dominios"], ...Object.entries(DATA.cases)];
-  document.getElementById("temas").innerHTML = temas.map(([id, t]) => `<button class="chip" aria-pressed="${state.caseId === id}" data-case="${id}">${t}</button>`).join("");
+  const opt = (o, all, cur) => [["all", all], ...Object.entries(o)].map(([id, t]) => `<option value="${id}" ${cur === id ? "selected" : ""}>${esc(t)}</option>`).join("");
+  document.getElementById("f-rubro").innerHTML = opt(DATA.rubros, "Todos los rubros", state.rubro);
+  document.getElementById("f-tema").innerHTML = opt(DATA.temas, "Todos los temas", state.tema);
   const sts = [["all", "Cualquier estado"], ["red", "🔴 Actuar"], ["amber", "🟡 Vigilar"], ["green", "🟢 En meta"]];
   document.getElementById("estados").innerHTML = sts.map(([id, t]) => `<button class="chip" aria-pressed="${state.status === id}" data-status="${id}">${t}</button>`).join("");
 }
-function visible() { return DATA.kpis.filter(k => (state.caseId === "all" || k.case === state.caseId) && (state.status === "all" || k.status === state.status)); }
+function visible() {
+  return DATA.kpis.filter(k => (state.rubro === "all" || k.rubros.includes(state.rubro)) && (state.tema === "all" || k.tema === state.tema)
+    && (state.status === "all" || k.status === state.status));
+}
+function hashOf() {
+  const p = [];
+  if (state.rubro !== "all") p.push("rubro", state.rubro);
+  if (state.tema !== "all") p.push("tema", state.tema);
+  if (state.status !== "all") p.push("estado", state.status);
+  if (state.kpi) p.push("indicador", state.kpi);
+  return "#/" + p.join("/");
+}
+function readHash() {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (h.startsWith("/")) {
+    const p = h.slice(1).split("/");
+    for (let i = 0; i + 1 < p.length; i += 2) {
+      if (p[i] === "rubro" && p[i + 1] in DATA.rubros) state.rubro = p[i + 1];
+      if (p[i] === "tema" && p[i + 1] in DATA.temas) state.tema = p[i + 1];
+      if (p[i] === "estado" && ["red", "amber", "green"].includes(p[i + 1])) state.status = p[i + 1];
+      if (p[i] === "indicador") state.kpi = p[i + 1];
+    }
+  } else if (h) {  // older addresses: dominio/estado/indicador
+    const p = h.split("/");
+    if (["red", "amber", "green"].includes(p[1])) state.status = p[1];
+    if (p[2]) state.kpi = p[2];
+  }
+}
 function render() {
   chips();
   const list = visible();
   if (!list.find(k => k.id === state.kpi)) { state.kpi = list.length ? list[0].id : null; state.group = null; }
   document.getElementById("tarjetas").innerHTML = list.map(k => `
     <button class="card ${k.status.replace("/", "")}" data-kpi="${k.id}" aria-current="${k.id === state.kpi}" data-tip aria-describedby="tip-${k.id}">
-      <span class="case">${DATA.cases[k.case]}</span><span class="name">${esc(k.name)}</span><span class="value">${k.display}</span>
+      <span class="case">${esc(k.case_title)}</span><span class="name">${esc(k.name)}</span><span class="value">${k.display}</span>
       <span class="status" data-tip aria-describedby="regla-${k.id}">${ICON[k.status]} ${WORD[k.status]} · meta ${k.target}</span>
       <span class="period">${esc(k.period)}</span>${sparkline(k)}</button>`).join("") || "<p>Ningún indicador cumple estos filtros.</p>";
   const c = {red: 0, amber: 0, green: 0};
   list.forEach(k => { if (k.status in c) c[k.status]++; });
-  document.getElementById("resumen").textContent = `${list.length} indicadores · ${c.red} para actuar · ${c.amber} para vigilar · ${c.green} en meta`;
+  const filtro = [state.rubro !== "all" ? DATA.rubros[state.rubro] : "", state.tema !== "all" ? DATA.temas[state.tema] : ""].filter(Boolean).join(" · ");
+  document.getElementById("resumen").textContent = `${filtro ? filtro + ": " : ""}${list.length} indicadores · ${c.red} para actuar · ${c.amber} para vigilar · ${c.green} en meta`;
   detail();
-  try { history.replaceState(null, "", "#" + [state.caseId, state.status, state.kpi || ""].join("/")); } catch (e) {}
+  try { history.replaceState(null, "", hashOf()); } catch (e) {}
 }
 
 // ---------------------------------------------------------------- detalle
@@ -615,7 +730,7 @@ function drawTrend(k) {
   L.annotations.push({xref: "paper", x: 0, y: k.target_value * m, text: "meta", showarrow: false, xanchor: "left", yanchor: "bottom", font: {size: 11}});
   if (firstBad) L.annotations.push({x: x[firstBad[1]], y: y[firstBad[1]] * m, text: "aquí empezó", showarrow: true, arrowhead: 0, ay: -36, font: {size: 11, color: "__INK__"}});
   if (worst && worst !== firstBad && grade(k, worst[0]) !== "green") L.annotations.push({x: x[worst[1]], y: worst[0] * m, text: "peor", showarrow: true, arrowhead: 0, ay: 34, font: {size: 11, color: "__INK__"}});
-  L.yaxis = {ticksuffix: suffix(k).trim() ? " " + suffix(k).trim() : "", gridcolor: "__GRID__", zeroline: false, rangemode: k.direction === "target_range" ? "normal" : "tozero"};
+  L.yaxis = {ticksuffix: axisSuffix(k), gridcolor: "__GRID__", zeroline: false, rangemode: k.direction === "target_range" ? "normal" : "tozero"};
   L.xaxis = {type: "category", showgrid: false, automargin: true};
   Plotly.react("g-trend", [{x, y: y.map(v => v === null ? null : v * m), mode: "lines+markers", line: {color: "__HIGHLIGHT__", width: 2.5},
     marker: {size: 8, color: y.map(v => COLOR[grade(k, v)]), line: {color: "white", width: 1}},
@@ -647,16 +762,22 @@ document.addEventListener("click", ev => {
   if (ev.defaultPrevented) return;  // first tap on a touch screen only opens the tooltip
   const bt = ev.target.closest("button");
   if (!bt || bt.id === "ver-todo") return;
-  if (bt.dataset.case) { state.caseId = bt.dataset.case; }
+  if (bt.classList.contains("alerta")) {  // an alert opens its rubro and its first indicator
+    state.rubro = DATA.case_rubros[bt.dataset.case][0]; state.tema = "all"; state.status = "all";
+    const c = DATA.valor.casos.find(x => x.caso === bt.dataset.case); if (c) state.kpi = c.componentes[0].kpi;
+    if (window.kpiTooltipHide) window.kpiTooltipHide(); render(); document.getElementById("tarjetas").scrollIntoView({behavior: "smooth"}); return;
+  }
   if (bt.dataset.status) state.status = bt.dataset.status;
   if (bt.dataset.kpi) { state.kpi = bt.dataset.kpi; state.group = null; }
-  if (bt.dataset.case || bt.dataset.status || bt.dataset.kpi) { if (window.kpiTooltipHide) window.kpiTooltipHide(); render(); }
+  if (bt.dataset.status || bt.dataset.kpi) { if (window.kpiTooltipHide) window.kpiTooltipHide(); render(); }
 });
+document.addEventListener("change", ev => {
+  if (ev.target.id === "f-rubro") { state.rubro = ev.target.value; state.group = null; render(); }
+  if (ev.target.id === "f-tema") { state.tema = ev.target.value; state.group = null; render(); }
+});
+window.addEventListener("hashchange", () => { state.rubro = "all"; state.tema = "all"; state.status = "all"; readHash(); render(); });
 document.getElementById("tips").innerHTML = DATA.kpis.map(tipHtml).join("");
-const parts = decodeURIComponent(location.hash.slice(1)).split("/");
-if (parts[0] && (parts[0] === "all" || parts[0] in DATA.cases)) state.caseId = parts[0];
-if (["all", "red", "amber", "green"].includes(parts[1])) state.status = parts[1];
-if (parts[2]) state.kpi = parts[2];
+readHash();
 resumen();
 render();
 </script>

@@ -34,7 +34,7 @@ serve: site
 
 # Checks that need the built site (readability, coherence of the published numbers, privacy).
 legibilidad:
-	KPISTORY_REQUIRE_SITE=1 $(PY) -m pytest tests/test_legibilidad.py tests/test_coherencia.py tests/test_valor_y_graficos.py
+	KPISTORY_REQUIRE_SITE=1 $(PY) -m pytest tests/test_legibilidad.py tests/test_coherencia.py tests/test_valor_y_graficos.py tests/test_rubros.py
 
 privacidad:
 	$(PY) -m kpistory privacidad
